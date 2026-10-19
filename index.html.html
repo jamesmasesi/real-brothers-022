@@ -2,93 +2,103 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Real Brothers 022</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
 <style>
-:root{--bg:#f6f5f1;--card:#fff;--tx:#1d2420;--mu:#6b746e;--ac:#1f6b4a;--bd:#e2e0d8;--bad:#b3392f;--warn:#b77a14;--ok:#1f6b4a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141815;--card:#1d231f;--tx:#eceee9;--mu:#9aa39d;--ac:#4cb887;--bd:#2d352f;--bad:#e5766c;--warn:#e2a649;--ok:#4cb887}}
-html{scroll-padding-top:env(safe-area-inset-top,0px)}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+:root{--bg:#f6f5f1;--card:#fff;--tx:#1d2420;--mu:#6b746e;--ac:#1f6b4a;--bd:#e2e0d8;--bad:#b3392f;--warn:#b77a14;--ok:#1f6b4a}
+@media (prefers-color-scheme:dark){:root{--bg:#141815;--card:#1d231f;--tx:#eceee9;--mu:#9aa39d;--ac:#4cb887;--bd:#2d352f;--bad:#e5766c;--warn:#e2a649;--ok:#4cb887}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding-top:env(safe-area-inset-top,0px)}
 .w{max-width:1000px;margin:0 auto;padding:16px}
-header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:16px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 h1{font-size:20px;margin:0}h2{font-size:16px;margin:0 0 10px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.k{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}
-.k small{color:var(--mu);display:block}.k b{font-size:20px}
+.k{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}.k small{color:var(--mu);display:block}.k b{font-size:20px}
 input,select,button{font:inherit;padding:9px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
 button{background:var(--ac);color:#fff;border:0;cursor:pointer}button.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.row>*{flex:1;min-width:120px}
 .tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}th:first-child,td:first-child{text-align:left}
-th{color:var(--mu);font-weight:600}
-.bar{height:10px;background:var(--bd);border-radius:6px;overflow:hidden;position:relative}.bar i{display:block;height:100%;background:var(--ac)}
+th,td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:var(--mu)}
+.bar{height:10px;background:var(--bd);border-radius:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
 .tag{padding:2px 8px;border-radius:10px;font-size:12px;border:1px solid currentColor}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mu{color:var(--mu);font-size:13px}
 .login{max-width:380px;margin:12vh auto}.login .row>*{flex:1 1 100%}
 </style></head><body><div class="w" id="app"></div>
 <script>
-const SEED=[
-["James Kithome",2100,7500,7500,6000,0],["Muthoka Daniel",2600,7500,7500,4300,0],["Dominic Mwendwa",1500,7500,7500,5000,0],
-["Nicholus Kimeu",600,1100,0,0,0],["Erick Ndambuki",800,2700,0,0,0],["Dennis Muiwa",1150,7500,800,0,0],
-["Onesmus Mwongela",2100,7500,7500,7300,0],["Kelvin Muthusi",2500,7500,7500,1700,0],["Jorum Mutina",2100,7500,4000,0,0],
-["Denis Mwendwa",3200,7500,7500,1900,0],["Leornard Musyoki",6300,5000,0,0,0],["Faustine Mwendwa",1500,6300,0,0,0],
-["Charlse Wambua",1400,7500,7500,4000,0],["Justus Nthiw’a",1100,7500,1800,0,0],["Moses Wambua",850,7500,0,0,0],
-["Lucas Mwangangi",4800,7500,7500,7500,4000],["Mutinda Nzioka",1700,7500,5850,0,0],["Albanus Kioko",2450,7500,7500,1450,0],
-["Daniel Wio",2300,7500,7500,7500,0],["John Maundu",1600,7500,7500,2850,0]
-].map((r,i)=>({id:i+1,name:r[0],pin:"1234",sav:r[1],w:[r[2],r[3],r[4],r[5]],log:[]}));
-const ADMIN_PIN="0000",CAP=7500,YEAR=15000;
-let S,user=null;
-try{S=JSON.parse(localStorage.getItem("rb022"))}catch(e){}
-if(!S||!S.m)S={m:SEED};
-function save(){try{localStorage.setItem("rb022",JSON.stringify(S))}catch(e){}}
+// ====== PUT YOUR SUPABASE DETAILS HERE (Project Settings > API) ======
+const SUPABASE_URL="https://zjzatmkvinzhsqakgvtl.supabase.co";
+const SUPABASE_ANON_KEY="sb_publishable_YOwidqPDngVirzOsJwtSpw_Jvh_lAvW";
+// =====================================================================
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const CAP=7500,YEAR=15000,A=document.getElementById("app");
 const f=n=>"KES "+Number(n).toLocaleString();
-const d26=m=>m.w[2]+m.w[3], d25=m=>m.w[0]+m.w[1];
-function status(m){const v=d26(m);if(v>=YEAR)return["Complete","ok"];if(v>=CAP)return["On track","ok"];if(v>=CAP*0.5)return["Behind","warn"];return["At risk","bad"]}
-const $=s=>document.getElementById("app");
-function loginView(err){
-$().innerHTML=`<div class="card login"><h1>Real Brothers 022</h1><p class="mu">Sign in to see your contributions.</p>
-<div class="row"><select id="who"><option value="admin">Admin / Treasurer</option>${S.m.map(m=>`<option value="${m.id}">${m.name}</option>`).join("")}</select>
-<input id="pin" type="password" inputmode="numeric" placeholder="PIN"><button onclick="doLogin()">Sign in</button></div>
-<p class="bad">${err||""}</p><p class="mu">Demo PINs: admin 0000, members 1234. Data is saved in this browser only.</p></div>`}
-function doLogin(){const w=document.getElementById("who").value,p=document.getElementById("pin").value;
-if(w==="admin"&&p===ADMIN_PIN){user="admin";return render()}
-const m=S.m.find(x=>String(x.id)===w);if(m&&p===m.pin){user=m.id;return render()}loginView("Wrong PIN.")}
-function logout(){user=null;loginView()}
-function hdr(t){return`<header><h1>${t}</h1><button class="g" onclick="logout()">Sign out</button></header>`}
-function render(){user==="admin"?adminView():memberView(S.m.find(x=>x.id===user))}
-function adminView(q=""){
-const M=S.m,tot=M.reduce((a,m)=>a+d26(m),0),sav=M.reduce((a,m)=>a+m.sav,0),risk=M.filter(m=>status(m)[1]==="bad").length,done=M.filter(m=>d26(m)>=YEAR).length;
-const rows=M.filter(m=>m.name.toLowerCase().includes(q.toLowerCase())).map(m=>{const s=status(m);return`<tr><td>${m.name}</td><td>${f(m.sav)}</td><td>${f(d25(m))}</td><td>${f(d26(m))}</td><td>${f(Math.max(0,YEAR-d26(m)))}</td><td><span class="tag ${s[1]}">${s[0]}</span></td></tr>`}).join("");
-$().innerHTML=hdr("Admin dashboard")+`<div class="grid">
-<div class="k"><small>Members</small><b>${M.length} / 25</b></div>
-<div class="k"><small>Dowry fund 2026</small><b>${f(tot)}</b></div>
-<div class="k"><small>Target 2026</small><b>${f(M.length*YEAR)}</b></div>
-<div class="k"><small>Savings held</small><b>${f(sav)}</b></div>
-<div class="k"><small>Completed 15,000</small><b>${done}</b></div>
-<div class="k"><small>At risk</small><b class="bad">${risk}</b></div></div>
+let D={members:[],pays:[],admin:false,q:""};
+
+function loginView(err){A.innerHTML=`<div class="card login"><h1>Real Brothers 022</h1><p class="mu">Sign in to see your contributions.</p>
+<div class="row"><input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password"><button onclick="login()">Sign in</button></div>
+<p class="bad">${err||""}</p></div>`}
+async function login(){const {error}=await sb.auth.signInWithPassword({email:em.value.trim(),password:pw.value});
+if(error)return loginView("Wrong email or password.");load()}
+async function logout(){await sb.auth.signOut();loginView()}
+
+async function load(){
+A.innerHTML='<p class="mu">Loading…</p>';
+const [m,p,a]=await Promise.all([sb.from("members").select("*").order("name"),sb.from("payments").select("*").order("id",{ascending:false}),sb.rpc("is_admin")]);
+if(m.error||p.error)return loginView("Could not load data. Check your Supabase setup.");
+D.members=m.data;D.pays=p.data;D.admin=a.data===true;render()}
+
+function calc(m){const mine=D.pays.filter(x=>x.member_id===m.id),w={};
+let sav=0;mine.forEach(x=>{if(x.kind==="savings")sav+=+x.amount;else w[x.wave]=(w[x.wave]||0)+ +x.amount});
+const g=k=>w[k]||0;return{sav,w1:g("W1-2025"),w2:g("W2-2025"),w3:g("W1-2026"),w4:g("W2-2026"),d26:g("W1-2026")+g("W2-2026"),d25:g("W1-2025")+g("W2-2025"),log:mine}}
+function status(v){return v>=YEAR?["Complete","ok"]:v>=CAP?["On track","ok"]:v>=CAP/2?["Behind","warn"]:["At risk","bad"]}
+const hdr=t=>`<header><h1>${t}</h1><button class="g" onclick="logout()">Sign out</button></header>`;
+
+function render(){
+if(D.admin)return adminView();
+const m=D.members[0];if(!m)return A.innerHTML=hdr("Real Brothers 022")+'<div class="card">Your email is not linked to a member yet. Please ask the Treasurer.</div>';
+memberView(m)}
+
+function adminView(){
+const rows=D.members.map(m=>({m,c:calc(m)}));
+const tot=rows.reduce((a,r)=>a+r.c.d26,0),sav=rows.reduce((a,r)=>a+r.c.sav,0);
+const risk=rows.filter(r=>status(r.c.d26)[1]==="bad").length,done=rows.filter(r=>r.c.d26>=YEAR).length;
+const body=rows.filter(r=>r.m.name.toLowerCase().includes(D.q.toLowerCase())).map(({m,c})=>{const s=status(c.d26);
+return`<tr><td>${m.name}${m.email?"":' <span class="mu">(no email)</span>'}</td><td>${f(c.sav)}</td><td>${f(c.d25)}</td><td>${f(c.d26)}</td><td>${f(Math.max(0,YEAR-c.d26))}</td><td><span class="tag ${s[1]}">${s[0]}</span></td></tr>`}).join("");
+A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
+<div class="k"><small>Members</small><b>${rows.length} / 25</b></div><div class="k"><small>Dowry fund 2026</small><b>${f(tot)}</b></div>
+<div class="k"><small>Target 2026</small><b>${f(rows.length*YEAR)}</b></div><div class="k"><small>Savings held</small><b>${f(sav)}</b></div>
+<div class="k"><small>Completed 15,000</small><b>${done}</b></div><div class="k"><small>At risk</small><b class="bad">${risk}</b></div></div>
 <div class="card"><h2>Record a payment</h2><div class="row">
-<select id="pm">${M.map(m=>`<option value="${m.id}">${m.name}</option>`).join("")}</select>
-<select id="pt"><option value="sav">Monthly savings (200)</option><option value="dow">Dowry contribution (1,250)</option></select>
+<select id="pm">${D.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join("")}</select>
+<select id="pt"><option value="savings">Monthly savings (200)</option><option value="dowry">Dowry contribution (1,250)</option></select>
 <input id="pa" type="number" min="1" placeholder="Amount"><button onclick="pay()">Add</button></div>
-<p class="mu">Dowry payments fill Wave 1 2026 up to 7,500, then Wave 2.</p></div>
-<div class="card"><h2>Members</h2><div class="row"><input id="q" placeholder="Search member" value="${q}" oninput="adminView(this.value);document.getElementById('q').focus()"></div>
-<div class="tw"><table><tr><th>Member</th><th>Savings</th><th>Dowry 2025</th><th>Dowry 2026</th><th>Balance to 15,000</th><th>Status</th></tr>${rows}</table></div>
-<p class="mu">Status: On track = 7,500 or more (June target). Behind = 3,750 to 7,499. At risk = below 3,750.</p></div>`}
-function pay(){const m=S.m.find(x=>String(x.id)===document.getElementById("pm").value),t=document.getElementById("pt").value,a=+document.getElementById("pa").value;
-if(!(a>0))return;
-if(t==="sav")m.sav+=a;else{let r=a;const s1=Math.min(r,CAP-m.w[2]);m.w[2]+=Math.max(0,s1);r-=Math.max(0,s1);m.w[3]+=r}
-m.log.unshift({d:new Date().toLocaleDateString(),t:t==="sav"?"Savings":"Dowry",a});save();adminView()}
-function memberView(m){
-const v=d26(m),p=Math.min(100,v/YEAR*100),s=status(m);
-const w=(l,x)=>`<tr><td>${l}</td><td>${f(x)}</td><td><div class="bar"><i style="width:${Math.min(100,x/CAP*100)}%"></div></td></tr>`;
-$().innerHTML=hdr("Hello, "+m.name.split(" ")[0])+`<div class="grid">
-<div class="k"><small>My savings</small><b>${f(m.sav)}</b></div>
-<div class="k"><small>Dowry paid 2026</small><b>${f(v)}</b></div>
-<div class="k"><small>Balance to 15,000</small><b>${f(Math.max(0,YEAR-v))}</b></div>
-<div class="k"><small>Status</small><b class="${s[1]}">${s[0]}</b></div></div>
+<p class="mu">Dowry payments fill Wave 1 2026 up to 7,500, then Wave 2 2026.</p></div>
+<div class="card"><h2>Member emails</h2><div class="row"><select id="em2">${D.members.map(m=>`<option value="${m.id}">${m.name}${m.email?" ("+m.email+")":""}</option>`).join("")}</select>
+<input id="em3" type="email" placeholder="Member's login email"><button onclick="setEmail()">Save email</button></div>
+<p class="mu">Create the member's login in Supabase (Authentication > Users) with this same email.</p></div>
+<div class="card"><h2>Members</h2><div class="row"><input id="q" placeholder="Search member" value="${D.q}" oninput="D.q=this.value;adminView();q.focus()"></div>
+<div class="tw"><table><tr><th>Member</th><th>Savings</th><th>Dowry 2025</th><th>Dowry 2026</th><th>Balance to 15,000</th><th>Status</th></tr>${body}</table></div>
+<p class="mu">On track = 7,500 or more (June target). Behind = 3,750 to 7,499. At risk = below 3,750.</p></div>`}
+
+async function pay(){const id=+pm.value,t=pt.value,a=+pa.value;if(!(a>0))return;
+const m=D.members.find(x=>x.id===id);let ins=[];
+if(t==="savings")ins.push({member_id:id,kind:"savings",amount:a});
+else{const c=calc(m),room=Math.max(0,CAP-c.w3),x=Math.min(a,room);
+if(x>0)ins.push({member_id:id,kind:"dowry",amount:x,wave:"W1-2026"});
+if(a-x>0)ins.push({member_id:id,kind:"dowry",amount:a-x,wave:"W2-2026"})}
+const {error}=await sb.from("payments").insert(ins);if(error)return alert("Could not save: "+error.message);load()}
+async function setEmail(){const e=em3.value.trim().toLowerCase();if(!e)return;
+const {error}=await sb.from("members").update({email:e}).eq("id",+em2.value);if(error)return alert(error.message);load()}
+
+function memberView(m){const c=calc(m),s=status(c.d26),p=Math.min(100,c.d26/YEAR*100);
+const w=(l,x)=>`<tr><td>${l}</td><td>${f(x)}</td><td><div class="bar"><i style="width:${Math.min(100,x/CAP*100)}%"></i></div></td></tr>`;
+A.innerHTML=hdr("Hello, "+m.name.split(" ")[0])+`<div class="grid">
+<div class="k"><small>My savings</small><b>${f(c.sav)}</b></div><div class="k"><small>Dowry paid 2026</small><b>${f(c.d26)}</b></div>
+<div class="k"><small>Balance to 15,000</small><b>${f(Math.max(0,YEAR-c.d26))}</b></div><div class="k"><small>Status</small><b class="${s[1]}">${s[0]}</b></div></div>
 <div class="card"><h2>Year target: ${f(YEAR)}</h2><div class="bar"><i style="width:${p}%"></i></div><p class="mu">${p.toFixed(0)}% complete. Monthly due: KES 1,450 (200 savings + 1,250 dowry).</p></div>
 <div class="card"><h2>Dowry waves</h2><div class="tw"><table><tr><th>Wave</th><th>Paid (of 7,500)</th><th>Progress</th></tr>
-${w("Wave 1 2025",m.w[0])}${w("Wave 2 2025",m.w[1])}${w("Wave 1 2026",m.w[2])}${w("Wave 2 2026",m.w[3])}</table></div></div>
-<div class="card"><h2>Recent payments</h2>${m.log.length?m.log.slice(0,8).map(l=>`<div class="row mu"><span>${l.d}</span><span>${l.t}</span><span>${f(l.a)}</span></div>`).join(""):'<p class="mu">No new payments recorded yet.</p>'}</div>
+${w("Wave 1 2025",c.w1)}${w("Wave 2 2025",c.w2)}${w("Wave 1 2026",c.w3)}${w("Wave 2 2026",c.w4)}</table></div></div>
+<div class="card"><h2>Recent payments</h2>${c.log.slice(0,8).map(l=>`<div class="row mu"><span>${l.paid_on}</span><span>${l.kind==="savings"?"Savings":"Dowry"}</span><span>${f(l.amount)}</span></div>`).join("")||'<p class="mu">No payments yet.</p>'}</div>
 <div class="card"><h2>Penalties</h2><p class="mu">Lateness 50 · Absence 200 · Special group absence 1,000 · Contribution not paid by end of meeting 100.</p></div>`}
-loginView();
+
+sb.auth.getSession().then(({data})=>data.session?load():loginView());
 </script></body></html>
