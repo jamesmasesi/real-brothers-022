@@ -64,7 +64,7 @@ const risk=rows.filter(r=>status(r.c.d26)[1]==="bad").length,done=rows.filter(r=
 const opts=D.members.map(m=>`<option value="${m.id}">${m.name}${m.status==="left"?" (left)":""}</option>`).join("");
 const btn=m=>`<button class="g" onclick="rep(${m.id})">PDF</button> <button class="g" onclick="csv(${m.id})">CSV</button>`;
 const body=rows.filter(r=>r.m.name.toLowerCase().includes(D.q.toLowerCase())).map(({m,c})=>{const s=status(c.d26);
-return`<tr><td>${m.name}${m.benefited?' <span class="tag ok">Benefited</span>':''}${m.email?"":' <span class="mu">(no email)</span>'}</td><td>${f(c.sav)}</td><td>${f(c.d25)}</td><td>${f(c.d26)}</td><td>${f(Math.max(0,YEAR-c.d26))}</td><td><span class="tag ${s[1]}">${s[0]}</span></td><td>${btn(m)}</td></tr>`}).join("");
+return`<tr><td>${m.name}${m.benefited?' <span class="tag ok">Benefited</span>':''}${m.email?"":' <span class="mu">(no email)</span>'}</td><td>${f(c.sav)}</td><td>${f(c.d25)}</td><td>${f(c.d26)}</td><td>${f(Math.max(0,YEAR-c.d26))}</td><td>${f(mon(m).owing)}</td><td>${f(dowOd(c))}</td><td><span class="tag ${s[1]}">${s[0]}</span></td><td>${btn(m)}</td></tr>`}).join("");
 const benT=ben.map(({m})=>`<tr><td>${m.name}</td><td>${m.benefit_amount?f(m.benefit_amount):"-"}</td><td>${m.benefit_date||"-"}</td><td>${m.status==="left"?"Left":"Active"}</td></tr>`).join("")||'<tr><td colspan="4" class="mu">None recorded yet.</td></tr>';
 const leftT=left.map(({m,c})=>`<tr><td>${m.name}</td><td>${f(c.d25+c.d26)}</td><td>${m.left_on||"-"}</td><td><span class="tag ${m.refund_status==="refunded"?"ok":"warn"}">${m.refund_status==="refunded"?"Refunded":"Not refunded"}</span></td><td>${m.refund_amount?f(m.refund_amount):"-"}</td><td>${btn(m)}</td></tr>`).join("")||'<tr><td colspan="6" class="mu">No former members recorded.</td></tr>';
 A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
@@ -89,7 +89,7 @@ A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
 <input id="em3" type="email" placeholder="Member's login email"><button onclick="setEmail()">Save email</button></div>
 <p class="mu">Create the member's login in Supabase (Authentication > Users) with this same email.</p></div>
 <div class="card"><h2>Active members</h2><div class="row"><input id="q" placeholder="Search member" value="${D.q}" oninput="D.q=this.value;adminView();q.focus()"></div>
-<div class="tw"><table><tr><th>Member</th><th>Savings</th><th>Dowry 2025</th><th>Dowry 2026</th><th>Balance to 15,000</th><th>Status</th><th>Report</th></tr>${body}</table></div>
+<div class="tw"><table><tr><th>Member</th><th>Savings</th><th>Dowry 2025</th><th>Dowry 2026</th><th>Balance to 15,000</th><th>Monthly owing</th><th>Dowry overdue</th><th>Status</th><th>Report</th></tr>${body}</table></div>
 <p class="mu">On track = 7,500 or more (June target). Behind = 3,750 to 7,499. At risk = below 3,750.</p></div>
 <div class="card"><h2>Members who have benefited</h2><div class="tw"><table><tr><th>Member</th><th>Amount</th><th>Date</th><th>Now</th></tr>${benT}</table></div></div>
 <div class="card"><h2>Former members</h2><div class="tw"><table><tr><th>Member</th><th>Dowry paid</th><th>Left on</th><th>Refund</th><th>Refund amount</th><th>Report</th></tr>${leftT}</table></div></div>`;
@@ -123,24 +123,35 @@ A.innerHTML=hdr("Hello, "+m.name.split(" ")[0])+`<div class="grid">
 <div class="card"><h2>Dowry waves</h2><div class="tw"><table><tr><th>Wave</th><th>Paid (of 7,500)</th><th>Progress</th></tr>
 ${w("Wave 1 2025",c.w1)}${w("Wave 2 2025",c.w2)}${w("Wave 1 2026",c.w3)}${w("Wave 2 2026",c.w4)}</table></div></div>
 <div class="card"><h2>Recent payments</h2>${c.log.slice(0,8).map(l=>`<div class="row mu"><span>${l.paid_on}</span><span>${l.kind==="savings"?"Savings":"Dowry"}</span><span>${f(l.amount)}</span></div>`).join("")||'<p class="mu">No payments yet.</p>'}</div>
+<div class="card"><h2>Monthly contributions (200 per month)</h2>${monT(m)}</div>
 <div class="card"><h2>My statement</h2><div class="row"><button onclick="rep(${m.id})">Print / save as PDF</button><button class="g" onclick="csv(${m.id})">Download CSV</button></div></div>
 <div class="card"><h2>Penalties</h2><p class="mu">Lateness 50 · Absence 200 · Special group absence 1,000 · Contribution not paid by end of meeting 100.</p></div>`}
 
 
+const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const WV=[["Wave 1 2025",new Date(2025,5,30,23,59),"30 Jun 2025"],["Wave 2 2025",new Date(2025,11,31,23,59),"31 Dec 2025"],["Wave 1 2026",new Date(2026,5,30,23,59),"30 Jun 2026"],["Wave 2 2026",new Date(2026,11,31,23,59),"31 Dec 2026"]];
+function mon(m){const n=new Date(),st=2025*12+11,en=Math.max(n.getFullYear()*12+n.getMonth(),st),pay={};
+D.pays.forEach(x=>{if(x.member_id===m.id&&x.kind==="savings"){const p=x.paid_on.split("-"),k=Math.max(+p[0]*12+(+p[1]-1),st);pay[k]=(pay[k]||0)+ +x.amount}});
+const rows=[];let cp=0;for(let k=st;k<=en;k++){const p=pay[k]||0;cp+=p;const cd=200*(k-st+1);rows.push({l:MN[k%12]+" "+Math.floor(k/12),p,cp,cd,bal:cp-cd})}
+rows.forEach((x,i)=>{if(x.cp>=x.cd)x.cl=i===0||rows[i].p>0&&rows[i].cp-rows[i].p<x.cd?"Paid in month":"Paid in month";else x.cl="Unpaid";
+if(x.cp>=x.cd){const j=rows.findIndex((y,t)=>t>=i&&y.cp>=x.cd);x.cl=j===i?"Paid in month":"Paid in "+rows[j].l}else x.cl="Unpaid"});
+const last=rows[rows.length-1];return{rows,owing:Math.max(0,-last.bal),credit:Math.max(0,last.bal)}}
+function monT(m){const q=mon(m);return`<div class="tw"><table><tr><th>Month</th><th>Paid</th><th>Position</th><th>Cleared</th></tr>${q.rows.map(x=>`<tr><td>${x.l}</td><td>${x.p?f(x.p):"-"}</td><td>${x.bal<0?"Owing "+f(-x.bal):x.bal>0?"Credit "+f(x.bal):"Settled"}</td><td>${x.cl}</td></tr>`).join("")}</table></div><p class="mu">Monthly contributions owing now: ${f(q.owing)}${q.credit?" · Extra/credit: "+f(q.credit):""}</p>`}
+function dowOd(c){return WV.reduce((a,x,i)=>a+(new Date()>=x[1]?Math.max(0,CAP-[c.w1,c.w2,c.w3,c.w4][i]):0),0)}
 function csv(id){const m=D.members.find(x=>x.id===id),c=calc(m);
-const r=[["Real Brothers 022 statement"],["Member",m.name],["Date",new Date().toLocaleDateString()],[],["Savings",c.sav],["Dowry 2025",c.d25],["Dowry 2026",c.d26],["Balance to 15000",Math.max(0,YEAR-c.d26)],[],["Date","Type","Wave","Amount","Note"]];
-c.log.slice().reverse().forEach(l=>r.push([l.paid_on,l.kind,l.wave||"",l.amount,l.note||""]));
+const r=[["Real Brothers 022 statement"],["Member",m.name],["Date",new Date().toLocaleDateString()],[],["Savings",c.sav],["Dowry 2025",c.d25],["Dowry 2026",c.d26],["Balance to 15000",Math.max(0,YEAR-c.d26)]];
+r.push([],["Month","Paid","Cumulative paid","Cumulative due","Position (+credit / -owing)","Cleared"]);mon(m).rows.forEach(x=>r.push([x.l,x.p,x.cp,x.cd,x.bal,x.cl]));r.push([],["Date","Type","Wave","Amount","Note"]);c.log.slice().reverse().forEach(l=>r.push([l.paid_on,l.kind,l.wave||"",l.amount,l.note||""]));
 const t=r.map(a=>a.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
 const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"text/csv"}));
 a.download=m.name.replace(/\s+/g,"_")+"_statement.csv";a.click()}
 function rep(id){const m=D.members.find(x=>x.id===id),c=calc(m),st=status(c.d26)[0];
-const wr=[["Wave 1 2025",c.w1],["Wave 2 2025",c.w2],["Wave 1 2026",c.w3],["Wave 2 2026",c.w4]].map(x=>`<tr><td>${x[0]}</td><td>${f(x[1])}</td><td>${f(CAP-x[1]>0?CAP-x[1]:0)}</td></tr>`).join("");
+const wr=WV.map((x,i)=>{const p=[c.w1,c.w2,c.w3,c.w4][i],rem=Math.max(0,CAP-p);return`<tr><td>${x[0]}</td><td>${x[2]}</td><td>${f(p)}</td><td>${f(rem)}</td><td>${rem===0?"Cleared":new Date()>=x[1]?"Overdue":"Not yet due"}</td></tr>`}).join("");
 const pr=c.log.map(l=>`<tr><td>${l.paid_on}</td><td>${l.kind==="savings"?"Savings":"Dowry"}</td><td>${l.wave||""}</td><td>${f(l.amount)}</td><td>${l.note||""}</td></tr>`).join("");
 const w=window.open("");if(!w)return alert("Please allow pop-ups to print the report.");
 w.document.write(`<html><head><title>${m.name} statement</title><style>body{font:14px system-ui,sans-serif;padding:24px;color:#111}table{border-collapse:collapse;width:100%;margin:8px 0 20px}th,td{border-bottom:1px solid #ccc;padding:6px;text-align:left}h1{font-size:20px;margin:0}h2{font-size:15px;margin:16px 0 0}</style></head><body>
 <h1>REAL BROTHERS 022: Member statement</h1><p>${m.name}<br>Printed: ${new Date().toLocaleDateString()}</p>
-<h2>Summary</h2><table><tr><td>Savings</td><td>${f(c.sav)}</td></tr><tr><td>Dowry paid 2025</td><td>${f(c.d25)}</td></tr><tr><td>Dowry paid 2026</td><td>${f(c.d26)}</td></tr><tr><td>Balance to ${f(YEAR)}</td><td>${f(Math.max(0,YEAR-c.d26))}</td></tr><tr><td>Status</td><td>${st}</td></tr></table>
-<h2>Dowry waves</h2><table><tr><th>Wave</th><th>Paid</th><th>Remaining of 7,500</th></tr>${wr}</table>
+<h2>Summary</h2><table><tr><td>Savings</td><td>${f(c.sav)}</td></tr><tr><td>Dowry paid 2025</td><td>${f(c.d25)}</td></tr><tr><td>Dowry paid 2026</td><td>${f(c.d26)}</td></tr><tr><td>Balance to ${f(YEAR)}</td><td>${f(Math.max(0,YEAR-c.d26))}</td></tr><tr><td>Status</td><td>${st}</td></tr><tr><td>Monthly contributions owing</td><td>${f(mon(m).owing)}</td></tr><tr><td>Dowry overdue now</td><td>${f(dowOd(c))}</td></tr></table>
+<h2>Monthly contributions (200 per month, from Dec 2025)</h2>${monT(m)}<h2>Dowry balances (7,500 per wave)</h2><table><tr><th>Wave</th><th>Due by</th><th>Paid</th><th>Balance</th><th>Status</th></tr>${wr}</table>
 <h2>Payment history</h2><table><tr><th>Date</th><th>Type</th><th>Wave</th><th>Amount</th><th>Note</th></tr>${pr}</table></body></html>`);
 w.document.close();w.focus();setTimeout(()=>w.print(),300)}
 sb.auth.getSession().then(({data})=>data.session?load():loginView());
