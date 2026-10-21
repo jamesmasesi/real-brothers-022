@@ -133,14 +133,14 @@ const WV=[["Wave 1 2025",new Date(2025,5,30,23,59),"30 Jun 2025"],["Wave 2 2025"
 function mon(m){const n=new Date(),st=2025*12+11,en=Math.max(n.getFullYear()*12+n.getMonth(),st),pay={};
 D.pays.forEach(x=>{if(x.member_id===m.id&&x.kind==="savings"){const p=x.paid_on.split("-"),k=Math.max(+p[0]*12+(+p[1]-1),st);pay[k]=(pay[k]||0)+ +x.amount}});
 const rows=[];let cp=0;for(let k=st;k<=en;k++){const p=pay[k]||0;cp+=p;const cd=200*(k-st+1);rows.push({l:MN[k%12]+" "+Math.floor(k/12),p,cp,cd,bal:cp-cd})}
-rows.forEach((x,i)=>{if(x.cp>=x.cd)x.cl=i===0||rows[i].p>0&&rows[i].cp-rows[i].p<x.cd?"Paid in month":"Paid in month";else x.cl="Unpaid";
-if(x.cp>=x.cd){const j=rows.findIndex((y,t)=>t>=i&&y.cp>=x.cd);x.cl=j===i?"Paid in month":"Paid in "+rows[j].l}else x.cl="Unpaid"});
+rows.forEach(x=>x.cv=[]);
+rows.forEach((x,i)=>{const j=rows.findIndex((y,t)=>t>=i&&y.cp>=x.cd);if(j<0)x.cl="Unpaid";else{x.cl=j===i?(x.p>0?"Paid on time":"Covered by earlier payment"):"Paid in "+rows[j].l+" (late)";if(j!==i)rows[j].cv.push(x.l)}});
 const last=rows[rows.length-1];return{rows,owing:Math.max(0,-last.bal),credit:Math.max(0,last.bal)}}
-function monT(m){const q=mon(m);return`<div class="tw"><table><tr><th>Month</th><th>Paid</th><th>Position</th><th>Cleared</th></tr>${q.rows.map(x=>`<tr><td>${x.l}</td><td>${x.p?f(x.p):"-"}</td><td>${x.bal<0?"Owing "+f(-x.bal):x.bal>0?"Credit "+f(x.bal):"Settled"}</td><td>${x.cl}</td></tr>`).join("")}</table></div><p class="mu">Monthly contributions owing now: ${f(q.owing)}${q.credit?" · Extra/credit: "+f(q.credit):""}</p>`}
+function monT(m){const q=mon(m);return`<div class="tw"><table><tr><th>Month</th><th>Due</th><th>Paid this month</th><th>Status</th><th>This payment also covers</th></tr>${q.rows.map(x=>`<tr><td>${x.l}</td><td>${f(200)}</td><td>${x.p?f(x.p):"-"}</td><td>${x.cl}</td><td>${x.cv.length?x.cv.join(", "):""}</td></tr>`).join("")}</table></div><p class="mu">Monthly contributions owing now: ${f(q.owing)}${q.credit?" · Extra/credit (fines or advance): "+f(q.credit):""}</p>`}
 function dowOd(c){return WV.reduce((a,x,i)=>a+(new Date()>=x[1]?Math.max(0,CAP-[c.w1,c.w2,c.w3,c.w4][i]):0),0)}
 function csv(id){const m=D.members.find(x=>x.id===id),c=calc(m);
 const r=[["Real Brothers 022 statement"],["Member",m.name],["Date",new Date().toLocaleDateString()],[],["Savings",c.sav],["Dowry 2025",c.d25],["Dowry 2026",c.d26],["Balance to 15000",Math.max(0,YEAR-c.d26)]];
-r.push([],["Month","Paid","Cumulative paid","Cumulative due","Position (+credit / -owing)","Cleared"]);mon(m).rows.forEach(x=>r.push([x.l,x.p,x.cp,x.cd,x.bal,x.cl]));r.push([],["Date","Type","Wave","Amount","Note"]);c.log.slice().reverse().forEach(l=>r.push([l.paid_on,l.kind,l.wave||"",l.amount,l.note||""]));
+r.push([],["Month","Paid","Cumulative paid","Cumulative due","Position (+credit / -owing)","Status","Also covers"]);mon(m).rows.forEach(x=>r.push([x.l,x.p,x.cp,x.cd,x.bal,x.cl,x.cv.join(" ")]));r.push([],["Date","Type","Wave","Amount","Note"]);c.log.slice().reverse().forEach(l=>r.push([l.paid_on,l.kind,l.wave||"",l.amount,l.note||""]));
 const t=r.map(a=>a.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
 const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"text/csv"}));
 a.download=m.name.replace(/\s+/g,"_")+"_statement.csv";a.click()}
