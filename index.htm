@@ -13,7 +13,7 @@ h1{font-size:20px;margin:0}h2{font-size:16px;margin:0 0 10px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .k{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}.k small{color:var(--mu);display:block}.k b{font-size:20px}
-input,select,button{font:inherit;padding:9px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+input,select,button,textarea{font:inherit;padding:9px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
 button{background:var(--ac);color:#fff;border:0;cursor:pointer}button.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.row>*{flex:1;min-width:120px}
 .tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}
@@ -31,7 +31,7 @@ const SUPABASE_ANON_KEY="sb_publishable_YOwidqPDngVirzOsJwtSpw_Jvh_lAvW";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const CAP=7500,YEAR=15000,A=document.getElementById("app");
 const f=n=>"KES "+Number(n).toLocaleString();
-let D={members:[],pays:[],admin:false,q:""};let rec=/type=recovery/.test(location.hash);
+let D={members:[],pays:[],admin:false,q:"",tab:"home",email:"",x:{ok:true,msgs:[],tg:[],els:[],opts:[],voted:[],off:[],res:{}}};let rec=/type=recovery/.test(location.hash);
 
 function loginView(err,mode,ok){const up=mode==="up";A.innerHTML=`<div class="card login"><h1>Real Brothers 022</h1><p class="mu">${up?"Create your account with the email the Treasurer registered for you.":"Sign in to see your contributions."}</p>
 <div class="row"><input id="em" type="email" placeholder="Email (username)"><input id="pw" type="password" placeholder="Password">${up?`<input id="pw2" type="password" placeholder="Confirm password"><button onclick="signup()">Create account</button>`:`<button onclick="login()">Sign in</button>`}</div>
@@ -52,21 +52,21 @@ sb.auth.onAuthStateChange(ev=>{if(ev==="PASSWORD_RECOVERY"){rec=true;A.innerHTML
 async function setPw(){if(np.value.length<6)return alert("Use at least 6 characters.");const {error}=await sb.auth.updateUser({password:np.value});if(error)return alert(error.message);rec=false;load()}
 async function login(){const {error}=await sb.auth.signInWithPassword({email:em.value.trim(),password:pw.value});
 if(error)return loginView("Wrong email or password.");load()}
-async function logout(){await sb.auth.signOut();loginView()}
+async function logout(){await sb.auth.signOut();D.tab="home";loginView()}
 
 async function load(){
 A.innerHTML='<p class="mu">Loading…</p>';
 const [m,p,a]=await Promise.all([sb.from("members").select("*").order("name"),sb.from("payments").select("*").order("id",{ascending:false}),sb.rpc("is_admin")]);
 if(m.error||p.error)return loginView("Could not load data. Check your Supabase setup.");
-D.members=m.data;D.pays=p.data;D.admin=a.data===true;render()}
+D.members=m.data;D.pays=p.data;D.admin=a.data===true;D.email=(await sb.auth.getSession()).data.session.user.email;await loadX();render()}
 
 function calc(m){const mine=D.pays.filter(x=>x.member_id===m.id),w={};
 let sav=0;mine.forEach(x=>{if(x.kind==="savings")sav+=+x.amount;else w[x.wave]=(w[x.wave]||0)+ +x.amount});
 const g=k=>w[k]||0;return{sav,w1:g("W1-2025"),w2:g("W2-2025"),w3:g("W1-2026"),w4:g("W2-2026"),d26:g("W1-2026")+g("W2-2026"),d25:g("W1-2025")+g("W2-2025"),log:mine}}
 function status(v){return v>=YEAR?["Complete","ok"]:v>=CAP?["On track","ok"]:v>=CAP/2?["Behind","warn"]:["At risk","bad"]}
-const hdr=t=>`<header><h1>${t}</h1><button class="g" onclick="logout()">Sign out</button></header>`;
+const hdr=t=>`<header><h1>${t}</h1><button class="g" onclick="logout()">Sign out</button></header>${nav()}`;
 
-function render(){if(rec)return;
+function render(){if(rec)return;if(D.tab==="msg")return msgView();if(D.tab==="vote")return voteView();
 if(D.admin)return adminView();
 const m=D.members[0];if(!m)return A.innerHTML=hdr("Real Brothers 022")+'<div class="card">Your email is not linked to a member yet. Please ask the Treasurer.</div>';
 memberView(m)}
@@ -165,6 +165,56 @@ function mail(id){const m=D.members.find(x=>x.id===id);if(!m.email)return alert(
 const b=bal(m),site=location.origin+location.pathname;
 const t=`Dear ${m.name},\n\nREAL BROTHERS 022 - account summary${m.id_number?" (Account no: "+m.id_number+")":""}\n\nMonthly contributions + penalties owing: ${f(b.mowe)}\nDowry overdue: ${f(b.od)}\nTOTAL OWING NOW: ${f(b.total)}\nWave 2 2026 paid so far: ${f(b.up)} of 7,500 (due 31 Dec 2026)\n\nSign in to see your full statement: ${site}\nUsername: ${m.email}\n\nThank you,\nTreasurer, REAL BROTHERS 022\nrealbrothers022@gmail.com`;
 location.href="mailto:"+encodeURIComponent(m.email)+"?subject="+encodeURIComponent("REAL BROTHERS 022 - your statement")+"&body="+encodeURIComponent(t)}
+const POS=["Chair","Vice Chair","Treasurer","Secretary","Vice Secretary","Coordinator","Discipline Master"];
+const esc=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const me=()=>{const m=D.members.find(x=>(x.email||"").toLowerCase()===(D.email||"").toLowerCase());return m?m.id:null};
+const closed=el=>el.status==="closed"||(el.closes_at&&new Date(el.closes_at)<=new Date());
+const nav=()=>{const u=D.admin?0:D.x.tg.filter(t=>!t.read).length,b=t=>D.tab===t?"":"g";return`<div class="row"><button class="${b("home")}" onclick="tab('home')">Dashboard</button><button class="${b("msg")}" onclick="tab('msg')">Messages${u?" ("+u+" new)":""}</button><button class="${b("vote")}" onclick="tab('vote')">Voting</button></div>`};
+const tab=t=>{D.tab=t;render()};
+async function loadX(){const q=t=>sb.from(t).select("*");
+const r=await Promise.all([q("messages").order("id",{ascending:false}),q("message_targets"),q("elections").order("id",{ascending:false}),q("options").order("id"),q("voted"),q("officers").order("sort")]);
+const x={ok:!r.some(z=>z.error),msgs:r[0].data||[],tg:r[1].data||[],els:r[2].data||[],opts:r[3].data||[],voted:r[4].data||[],off:r[5].data||[],res:{}};
+await Promise.all(x.els.filter(closed).map(async el=>{const g=await sb.rpc("results",{p_election:el.id});x.res[el.id]=g.data||[]}));D.x=x}
+const setup='<div class="card">Messages and voting are not switched on yet. Run vote-and-messages.sql in Supabase (SQL Editor), then refresh.</div>';
+function msgView(){const M=me();let h=hdr("Messages");if(!D.x.ok)return A.innerHTML=h+setup;
+if(D.admin)h+=`<div class="card"><h2>Send a message</h2><div class="row"><input id="mt" placeholder="Title"></div><div class="row"><textarea id="mb" rows="4" placeholder="Message"></textarea></div>
+<label class="mu"><input type="checkbox" id="mall" checked style="min-width:0"> Send to all active members</label>
+<div class="row"><select id="mr" multiple size="6">${D.members.filter(m=>m.status!=="left").map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></div>
+<p class="mu">To pick specific members, untick "all", then hold Ctrl (or tap several on a phone) in the list.</p><button onclick="sendMsg()">Send</button></div>`;
+h+=D.x.msgs.map(g=>{const t=D.x.tg.filter(x=>x.message_id===g.id),r=t.filter(x=>x.read).length,mine=t.find(x=>x.member_id===M);
+return`<div class="card"><h2>${esc(g.title)} ${!D.admin&&mine&&!mine.read?'<span class="tag warn">new</span>':""}</h2><p class="mu">${new Date(g.created_at).toLocaleDateString("en-GB")}${D.admin?" · sent to "+t.length+", read by "+r:""}</p><p style="white-space:pre-wrap">${esc(g.body)}</p></div>`}).join("")||'<div class="card mu">No messages yet.</div>';
+A.innerHTML=h;
+if(!D.admin&&M)sb.from("message_targets").update({read:true}).eq("member_id",M).eq("read",false).then(()=>{D.x.tg.forEach(t=>{if(t.member_id===M)t.read=true})})}
+async function sendMsg(){const t=mt.value.trim(),b=mb.value.trim();if(!t||!b)return alert("Add a title and a message.");
+const ids=mall.checked?D.members.filter(m=>m.status!=="left").map(m=>m.id):[...mr.selectedOptions].map(o=>+o.value);
+if(!ids.length)return alert("Choose who to send to.");
+const {data,error}=await sb.from("messages").insert({title:t,body:b}).select().single();if(error)return alert(error.message);
+const e2=(await sb.from("message_targets").insert(ids.map(i=>({message_id:data.id,member_id:i})))).error;if(e2)return alert(e2.message);
+await loadX();render()}
+function voteView(){const M=me();let h=hdr("Voting and officers");if(!D.x.ok)return A.innerHTML=h+setup;
+h+=`<div class="card"><h2>Current officers</h2><div class="tw"><table><tr><th>Position</th><th class="t">Holder</th></tr>${D.x.off.map((o,i)=>`<tr><td>${esc(o.position)}</td><td class="t">${D.admin?`<input id="of${i}" value="${esc(o.holder||"")}">`:esc(o.holder||"-")}</td></tr>`).join("")}</table></div>${D.admin?'<p><button onclick="saveOff()">Save officers</button></p>':""}</div>`;
+if(D.admin)h+=`<div class="card"><h2>Create a vote</h2><div class="row"><select id="vp">${POS.map(p=>`<option>${p}</option>`).join("")}<option>Motion</option></select><input id="vt" placeholder="Title (optional)"><input id="vc" type="datetime-local"></div>
+<div class="row"><textarea id="vo" rows="3" placeholder="Candidates or options separated by commas. A motion defaults to Yes, No, Abstain."></textarea></div>
+<div class="row"><button class="g" onclick="vo.value=D.members.filter(m=>m.status!=='left').map(m=>m.name).join(', ')">Fill with all active members</button><button onclick="mkVote()">Create vote</button></div>
+<p class="mu">Votes are secret: the system records who has voted, never how. Results show only after voting closes.</p></div>`;
+const act=D.members.filter(m=>m.status!=="left").length;
+h+=D.x.els.map(el=>{const os=D.x.opts.filter(o=>o.election_id===el.id),cl=closed(el),vd=D.x.voted.filter(v=>v.election_id===el.id),did=vd.some(v=>v.member_id===M);let b="";
+if(cl){const r=D.x.res[el.id]||[],tot=r.reduce((a,x)=>a+ +x.votes,0);b=r.map(x=>`<div class="row" style="margin:4px 0"><span style="flex:2">${esc(x.label)}</span><span>${x.votes} (${tot?Math.round(x.votes/tot*100):0}%)</span><div class="bar" style="flex:3;align-self:center"><i style="width:${tot?x.votes/tot*100:0}%"></i></div></div>`).join("")+`<p class="mu">Total votes: ${tot}</p>`}
+else if(did)b='<p class="ok">You have voted. Your choice is secret.</p>';
+else if(M)b=os.map(o=>`<label style="display:block;margin:6px 0"><input type="radio" name="v${el.id}" value="${o.id}" style="min-width:0"> ${esc(o.label)}</label>`).join("")+`<button onclick="castVote(${el.id})">Cast my secret vote</button>`;
+else b='<p class="mu">Your email is not linked to a member, so you cannot vote.</p>';
+return`<div class="card"><h2>${esc(el.title)} <span class="tag ${cl?"warn":"ok"}">${cl?"Closed":"Open"}</span></h2><p class="mu">${esc(el.position||"")}${el.closes_at?" · closes "+new Date(el.closes_at).toLocaleString("en-GB"):""}${D.admin?" · voted "+vd.length+" of "+act:""}</p>${b}${D.admin&&!cl?`<p><button class="g" onclick="closeVote(${el.id})">Close voting now</button></p>`:""}</div>`}).join("")||'<div class="card mu">No votes yet.</div>';
+A.innerHTML=h}
+async function castVote(id){const r=document.querySelector('input[name="v'+id+'"]:checked');if(!r)return alert("Choose an option first.");
+if(!confirm("Cast your vote? You cannot change it afterwards."))return;
+const {error}=await sb.rpc("cast_vote",{p_option:+r.value});if(error)return alert(error.message);await loadX();render()}
+async function closeVote(id){if(!confirm("Close this vote now? Results will be shown."))return;await sb.from("elections").update({status:"closed"}).eq("id",id);await loadX();render()}
+async function mkVote(){const pos=vp.value,lab=vo.value.trim()?vo.value.split(",").map(x=>x.trim()).filter(Boolean):(pos==="Motion"?["Yes","No","Abstain"]:[]);
+if(lab.length<2)return alert("Add at least two candidates or options.");
+const {data,error}=await sb.from("elections").insert({title:vt.value.trim()||(pos==="Motion"?"Motion":"Election: "+pos),position:pos,closes_at:vc.value?new Date(vc.value).toISOString():null}).select().single();if(error)return alert(error.message);
+const e2=(await sb.from("options").insert(lab.map(l=>({election_id:data.id,label:l})))).error;if(e2)return alert(e2.message);await loadX();render()}
+async function saveOff(){const rows=D.x.off.map((o,i)=>({position:o.position,holder:document.getElementById("of"+i).value.trim()||null,sort:o.sort}));
+const {error}=await sb.from("officers").upsert(rows);if(error)return alert(error.message);await loadX();render()}
 function csv(id){const m=D.members.find(x=>x.id===id),c=calc(m);
 const r=[["Real Brothers 022 statement"],["Member",m.name],["Account no",m.id_number||""],["Date",new Date().toLocaleDateString()],[],["Savings",c.sav],["Dowry 2025",c.d25],["Dowry 2026",c.d26],["Balance to 15000",Math.max(0,YEAR-c.d26)],["Monthly contributions owing",bal(m).mowe],["Dowry overdue now",bal(m).od],["TOTAL OWING NOW",bal(m).total]];
 r.push([],["Month","Paid","Cumulative paid","Cumulative due","Position (+credit / -owing)","Status","Also covers"]);mon(m).rows.forEach(x=>r.push([x.l,x.p,x.cp,x.cd,x.bal,x.cl,x.cv.join(" ")]));r.push([],["Date","Type","Wave","Amount","Note"]);c.log.slice().reverse().forEach(l=>r.push([l.paid_on,l.kind,l.wave||"",l.amount,l.note||""]));
