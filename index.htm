@@ -31,7 +31,7 @@ const SUPABASE_ANON_KEY="sb_publishable_YOwidqPDngVirzOsJwtSpw_Jvh_lAvW";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const CAP=7500,YEAR=15000,A=document.getElementById("app");
 const f=n=>"KES "+Number(n).toLocaleString();
-let D={members:[],pays:[],admin:false,q:"",tab:"home",fy:"all",fm:"all",email:"",x:{ok:true,msgs:[],tg:[],els:[],opts:[],voted:[],off:[],res:{}}};let rec=/type=recovery/.test(location.hash);
+let D={members:[],pays:[],admin:false,q:"",tab:"home",fy:"all",fm:"all",cm:0,email:"",x:{ok:true,msgs:[],tg:[],els:[],opts:[],voted:[],off:[],res:{}}};let rec=/type=recovery/.test(location.hash);
 
 function loginView(err,mode,ok){const up=mode==="up";A.innerHTML=`<div class="card login"><h1>Real Brothers 022</h1><p class="mu">${up?"Create your account with the email the Treasurer registered for you.":"Sign in to see your contributions."}</p>
 <div class="row"><input id="em" type="email" placeholder="Email (username)"><input id="pw" type="password" placeholder="Password">${up?`<input id="pw2" type="password" placeholder="Confirm password"><button onclick="signup()">Create account</button>`:`<button onclick="login()">Sign in</button>`}</div>
@@ -92,6 +92,8 @@ A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
 <input id="pa" type="number" min="1" placeholder="Amount"><button onclick="pay()">Add</button></div>
 <p class="mu">Dowry payments fill Wave 1 2026 up to 7,500, then Wave 2 2026.</p></div>
 <div class="card"><h2>Attendance (who was absent)</h2><div class="row"><select id="am" onchange="attList()">${attMonths()}</select></div><div id="al"></div><p class="mu">Rules: present and paid 200. Present but not paid 300 (200 + 100). Absent and paid 400. Absent and not paid 500. Ticked names are treated as absent.</p></div>
+${chartBlock()}
+<div class="card"><h2>Attendance record</h2>${flt()}${attTable()}</div>
 <div class="card"><h2>Add a member</h2><div class="row"><input id="nm" placeholder="Full name"><input id="ne" type="email" placeholder="Login email (username)"><input id="ni" placeholder="ID number (account no.)">
 <select id="ns"><option value="active">Active member</option><option value="left">Former member (left)</option></select>
 <label class="mu"><input id="nb" type="checkbox" style="min-width:0"> Already benefited</label><button onclick="addMember()">Add member</button></div></div>
@@ -143,7 +145,7 @@ A.innerHTML=hdr("Hello, "+m.name.split(" ")[0])+`<p class="mu">Account no: ${m.i
 <div class="card"><h2>Dowry waves</h2><div class="tw"><table><tr><th>Wave</th><th>Paid (of 7,500)</th><th>Progress</th></tr>
 ${w("Wave 1 2025",c.w1)}${w("Wave 2 2025",c.w2)}${w("Wave 1 2026",c.w3)}${w("Wave 2 2026",c.w4)}</table></div></div>
 <div class="card"><h2>Recent payments</h2>${c.log.slice(0,8).map(l=>`<div class="row mu"><span>${l.paid_on}</span><span>${l.kind==="savings"?"Savings":"Dowry"}</span><span>${f(l.amount)}</span></div>`).join("")||'<p class="mu">No payments yet.</p>'}</div>
-${myContrib(m)}
+${myContrib(m)}${myAtt(m)}${chartsFor(m)}
 <div class="card"><h2>Balance summary</h2>${balT(m)}</div>
 <div class="card"><h2>Monthly contributions (200 per month)</h2>${monT(m)}</div>
 <div class="card"><h2>My statement</h2><div class="row"><button onclick="rep(${m.id})">Print / save as PDF</button><button class="g" onclick="csv(${m.id})">Download CSV</button></div></div>
@@ -156,7 +158,7 @@ const WV=[["Wave 1 2025",new Date(2025,5,30,23,59),"30 Jun 2025"],["Wave 2 2025"
 function mon(m){const n=new Date(),st=2025*12+11,en=Math.max(n.getFullYear()*12+n.getMonth(),st),pay={};
 D.pays.forEach(x=>{if(x.member_id===m.id&&x.kind==="savings"){const p=x.paid_on.split("-"),k=+p[0]*12+(+p[1]-1);if(k>=st)pay[k]=(pay[k]||0)+ +x.amount}});
 const held=D.pays.some(x=>{if(x.kind!=="savings")return false;const q=x.paid_on.split("-");return +q[0]*12+(+q[1]-1)===en});
-const rows=[];let cp=0,cd=0;for(let k=st;k<=en;k++){const p=pay[k]||0,key=Math.floor(k/12)+"-"+String(k%12+1).padStart(2,"0"),ar=(D.x.att||[]).find(a=>a.member_id===m.id&&a.month===key),abs=ar?ar.absent:p===400,pen=p===0&&(k<en||held)?100:0,dd=200+(abs?200:0)+pen;cp+=p;cd+=dd;rows.push({l:MN[k%12]+" "+Math.floor(k/12),p,d:dd,pen,abs,cp,cd,bal:cp-cd})}
+const rows=[];let cp=0,cd=0;for(let k=st;k<=en;k++){const p=pay[k]||0,key=Math.floor(k/12)+"-"+String(k%12+1).padStart(2,"0"),ar=(D.x.att||[]).find(a=>a.member_id===m.id&&a.month===key),abs=ar?ar.absent:p===400,pen=p===0&&(k<en||held)?100:0,dd=200+(abs?200:0)+pen;cp+=p;cd+=dd;rows.push({l:MN[k%12]+" "+Math.floor(k/12),key,p,d:dd,pen,abs,cp,cd,bal:cp-cd})}
 rows.forEach(x=>x.cv=[]);
 rows.forEach((x,i)=>{const j=rows.findIndex((y,t)=>t>=i&&y.cp>=x.cd);if(j<0)x.cl="Unpaid";else{x.cl=j===i?(x.p>0?"Paid on time":"Covered by earlier payment"):"Paid in "+rows[j].l+" (late)";if(j!==i)rows[j].cv.push(x.l)}});
 const last=rows[rows.length-1];return{rows,owing:Math.max(0,-last.bal),credit:Math.max(0,last.bal)}}
@@ -226,7 +228,7 @@ const {error}=await sb.from("officers").upsert(rows);if(error)return alert(error
 function attMonths(){const n=new Date(),en=n.getFullYear()*12+n.getMonth();let o="";for(let k=en;k>=2025*12+11;k--)o+=`<option value="${Math.floor(k/12)+"-"+String(k%12+1).padStart(2,"0")}">${MN[k%12]} ${Math.floor(k/12)}</option>`;return o}
 function attList(){const sel=document.getElementById("am"),box=document.getElementById("al");if(!sel||!box)return;const key=sel.value;
 box.innerHTML=D.members.filter(m=>m.status!=="left").map(m=>{const p=D.pays.filter(x=>x.member_id===m.id&&x.kind==="savings"&&x.paid_on.slice(0,7)===key).reduce((a,x)=>a+ +x.amount,0),ar=(D.x.att||[]).find(a=>a.member_id===m.id&&a.month===key),chk=ar?ar.absent:p===400;
-return`<label style="display:inline-block;width:48%;min-width:150px;margin:3px 0"><input type="checkbox" class="ab" data-id="${m.id}" ${chk?"checked":""} style="min-width:0"> ${esc(m.name)}</label>`}).join("")+'<p><button onclick="saveAtt()">Save attendance</button></p>'}
+return`<label style="display:inline-block;width:48%;min-width:150px;margin:3px 0"><input type="checkbox" class="ab" onchange="attSummary()" data-id="${m.id}" ${chk?"checked":""} style="min-width:0"> ${esc(m.name)}</label>`}).join("")+'<div id="as" style="margin-top:8px"></div><p><button onclick="saveAtt()">Save attendance</button></p>';attSummary()}
 async function saveAtt(){const key=am.value,rows=[...document.querySelectorAll(".ab")].map(c=>({member_id:+c.dataset.id,month:key,absent:c.checked}));
 const {error}=await sb.from("attendance").upsert(rows,{onConflict:"member_id,month"});if(error)return alert(error.message.includes("attendance")?"Run update-sheet.sql in Supabase first.":error.message);await loadX();render()}
 const inP=d=>{const y=d.slice(0,4),m=d.slice(5,7);return(D.fy==="all"||y===D.fy)&&(D.fm==="all"||m===D.fm)};
@@ -280,6 +282,29 @@ if(!id||!/^\d{4}-\d{2}-\d{2}$/.test(d)||!["savings","dowry"].includes(t)||!(a>0)
 rows.push({member_id:id,kind:t,amount:a,paid_on:d,wave:c[4]||null,note:c[5]||"Imported"})});
 if(bad.length&&!confirm(bad.length+" line(s) cannot be read and will be skipped:\n"+bad.slice(0,5).join("\n")+"\nContinue with the "+rows.length+" good lines?"))return;
 if(!rows.length)return alert("Nothing to import.");const {error}=await sb.from("payments").insert(rows);if(error)return alert(error.message);csvIn.value="";await load()}
+function attSummary(){const el=document.getElementById("as");if(!el)return;const ab=[],pr=[];
+[...document.querySelectorAll(".ab")].forEach(c=>{const m=D.members.find(x=>x.id===+c.dataset.id);if(m)(c.checked?ab:pr).push(esc(m.name))});
+el.innerHTML=`<p><b>Present (${pr.length}):</b> ${pr.join(", ")||"-"}</p><p><b>Absent (${ab.length}):</b> ${ab.join(", ")||"-"}</p>`}
+function attTable(){const rows=D.members.filter(m=>m.status!=="left").map(m=>{const r=mon(m).rows.filter(x=>inP(x.key+"-01")),ab=r.filter(x=>x.abs);return{n:m.name,t:r.length,a:ab.length,l:ab.map(x=>x.l).join(", ")}});
+return`<div class="tw"><table><tr><th class="t">Member</th><th>Meetings</th><th>Present</th><th>Absent</th><th class="t">Months absent</th></tr>${rows.map(x=>`<tr><td class="t">${esc(x.n)}</td><td>${x.t}</td><td>${x.t-x.a}</td><td>${x.a}</td><td class="t">${esc(x.l)||"-"}</td></tr>`).join("")}</table></div><p class="mu">Based on the attendance box above. A month nobody marked counts as absent only if the member paid exactly 400.</p>`}
+function myAtt(m){const r=mon(m).rows.filter(x=>inP(x.key+"-01")),ab=r.filter(x=>x.abs);
+return`<div class="card"><h2>My attendance</h2><p>Meetings: ${r.length} · Present: ${r.length-ab.length} · Absent: ${ab.length}</p><p class="mu">${ab.length?"Absent in: "+ab.map(x=>x.l).join(", "):"No absences recorded."}</p></div>`}
+function vbars(it,cols,names){const n=cols.length,gw=n*12+8,W=it.length*gw+40,H=170,mx=Math.max(1,...it.flatMap(i=>i.v));let g="";
+it.forEach((i,k)=>{const x=36+k*gw;i.v.forEach((v,j)=>{const h=Math.round(v/mx*(H-40));g+=`<rect x="${x+j*12}" y="${H-24-h}" width="10" height="${h}" rx="2" style="fill:${cols[j]}"><title>${i.l}: ${f(v)}</title></rect>`});g+=`<text x="${x+n*6-1}" y="${H-8}" font-size="9" text-anchor="middle" fill="currentColor">${i.l}</text>`});
+return`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${Math.min(640,W*2)}px;height:auto" role="img"><text x="2" y="12" font-size="9" fill="currentColor">${f(mx)}</text><line x1="34" y1="${H-24}" x2="${W}" y2="${H-24}" stroke="currentColor" opacity=".3"/>${g}</svg><p class="mu">${names.map((nm,j)=>`<span style="color:${cols[j]}">&#9632;</span> ${nm}`).join(" &nbsp; ")}</p>`}
+function hbars(it,max){return`<div>${it.map(i=>`<div class="row" style="margin:4px 0;flex-wrap:nowrap;align-items:center"><span style="flex:0 0 36%;min-width:80px;font-size:13px">${esc(i.l)}</span><div class="bar" style="flex:1;min-width:0"><i style="width:${Math.min(100,i.v/(i.max||max)*100)}%;background:${i.c||"var(--ac)"}"></i></div><span style="flex:0 0 92px;min-width:0;text-align:right;font-size:12px">${f(i.v)}</span></div>`).join("")}</div>`}
+function chartsFor(m){const c=calc(m),r=mon(m).rows,now=new Date(),ws=[c.w1,c.w2,c.w3,c.w4],yr={};
+D.pays.filter(x=>x.member_id===m.id).forEach(x=>{const y=x.paid_on.slice(0,4);yr[y]=yr[y]||[0,0];yr[y][x.kind==="savings"?0:1]+=+x.amount});
+const wv=WV.map((x,i)=>({l:x[0],v:ws[i],max:CAP,c:ws[i]>=CAP?"var(--ac)":x[1]>now?"var(--mu)":ws[i]>0?"var(--warn)":"var(--bad)"}));
+return`<div class="card"><h2>${esc(m.name)}: charts</h2><p class="mu"><b>Monthly contributions: due and paid</b></p>${vbars(r.map(x=>({l:x.l.slice(0,3),v:[x.d,x.p]})),["var(--mu)","var(--ac)"],["Due","Paid"])}
+<p class="mu"><b>Dowry waves (7,500 each)</b></p>${hbars(wv,CAP)}
+<p class="mu"><b>Total paid each year</b></p>${vbars(Object.keys(yr).sort().map(y=>({l:y,v:yr[y]})),["var(--ac)","var(--warn)"],["Savings and penalties","Dowry"])}</div>`}
+function chartBlock(){const act=D.members.filter(m=>m.status!=="left");if(!act.length)return"";const sel=act.find(m=>m.id===D.cm)||act[0],n=new Date(),en=n.getFullYear()*12+n.getMonth(),mt=[];
+for(let k=2025*12+11;k<=en;k++)mt.push({l:MN[k%12],key:Math.floor(k/12)+"-"+String(k%12+1).padStart(2,"0")});
+const col=mt.map(t=>({l:t.l,v:[D.pays.filter(x=>x.kind==="savings"&&x.paid_on.slice(0,7)===t.key).reduce((a,x)=>a+ +x.amount,0)]}));
+const dw=act.map(m=>{const d=calc(m).d26,st=status(d)[1];return{l:m.name,v:d,max:YEAR,c:st==="ok"?"var(--ac)":st==="warn"?"var(--warn)":"var(--bad)"}});
+return`<div class="card"><h2>Charts by member</h2><div class="row"><select onchange="D.cm=+this.value;adminView()">${act.map(m=>`<option value="${m.id}" ${m.id===sel.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div></div>${chartsFor(sel)}
+<div class="card"><h2>Group overview</h2><p class="mu"><b>Dowry paid in 2026 (target 15,000 each)</b></p>${hbars(dw,YEAR)}<p class="mu"><b>Savings collected each month</b></p>${vbars(col,["var(--ac)"],["Savings and penalties paid"])}</div>`}
 function csv(id){const m=D.members.find(x=>x.id===id),c=calc(m);
 const r=[["Real Brothers 022 statement"],["Member",m.name],["Account no",m.id_number||""],["Date",new Date().toLocaleDateString()],[],["Savings",c.sav],["Dowry 2025",c.d25],["Dowry 2026",c.d26],["Balance to 15000",Math.max(0,YEAR-c.d26)],["Monthly contributions owing",bal(m).mowe],["Dowry overdue now",bal(m).od],["TOTAL OWING NOW",bal(m).total]];
 r.push([],["Month","Paid","Cumulative paid","Cumulative due","Position (+credit / -owing)","Status","Also covers"]);mon(m).rows.forEach(x=>r.push([x.l,x.p,x.cp,x.cd,x.bal,x.cl,x.cv.join(" ")]));r.push([],["Date","Type","Wave","Amount","Note"]);c.log.slice().reverse().forEach(l=>r.push([l.paid_on,l.kind,l.wave||"",l.amount,l.note||""]));
