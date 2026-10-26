@@ -96,7 +96,7 @@ A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
 <select id="ns"><option value="active">Active member</option><option value="left">Former member (left)</option></select>
 <label class="mu"><input id="nb" type="checkbox" style="min-width:0"> Already benefited</label><button onclick="addMember()">Add member</button></div></div>
 <div class="card"><h2>Benefit and exit</h2><div class="row"><select id="mm" onchange="hint()">${opts}</select></div><p class="mu" id="hint"></p>
-<div class="row"><input id="bamt" type="number" value="120000" placeholder="Amount received"><input id="bdt" type="date"><button onclick="saveBenefit()">Mark as benefited</button><button class="g" onclick="clearBenefit()">Remove benefit</button></div>
+<div class="row"><input id="bamt" type="number" value="120000" placeholder="Amount received"><input id="bdt" type="date"><button onclick="saveBenefit()">Mark as benefited and record payout</button><button class="g" onclick="clearBenefit()">Remove benefit</button></div>
 <div class="row"><select id="rs"><option value="not_refunded">Not refunded</option><option value="refunded">Refunded</option></select>
 <input id="ramt" type="number" placeholder="Refund amount"><button onclick="markLeft()">Mark as left</button><button class="g" onclick="reinstate()">Reinstate</button></div>
 <p class="mu">Per the constitution a member who resigns gets 50% of their yearly contributions, paid after 3 years. To update a refund later, select the member and use Mark as left again.</p></div>
@@ -110,7 +110,12 @@ A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
 <div class="card"><h2>Former members</h2><div class="tw"><table><tr><th>Member</th><th>Dowry paid</th><th>Left on</th><th>Refund</th><th>Refund amount</th><th>Report</th></tr>${leftT}</table></div></div>`;
 if(document.getElementById("mm"))hint();attList()}
 const upd=async(id,o)=>{const {error}=await sb.from("members").update(o).eq("id",id);if(error)return alert(error.message);load()};
-const saveBenefit=()=>upd(+mm.value,{benefited:true,benefit_amount:+bamt.value||null,benefit_date:bdt.value||null});
+async function saveBenefit(){const id=+mm.value,a=+bamt.value||120000,d=bdt.value||new Date().toISOString().slice(0,10),m=D.members.find(x=>x.id===id);
+if((D.x.led||[]).some(x=>x.kind==="payout"&&x.member_id===id)&&!confirm(m.name+" already has a payout recorded. Add another?"))return;
+if(!confirm("Record a dowry payout of "+f(a)+" to "+m.name+"? This is also deducted from the group balance."))return;
+const e=(await sb.from("ledger").insert({kind:"payout",entry_date:d,category:"Dowry payout",description:"Dowry payout to "+m.name,amount:a,member_id:id})).error;
+if(e)return alert(e.message.includes("ledger")?"Run finance.sql in Supabase first.":e.message);
+await upd(id,{benefited:true,benefit_amount:a,benefit_date:d})}
 const clearBenefit=()=>upd(+mm.value,{benefited:false,benefit_amount:null,benefit_date:null});
 const markLeft=()=>{const m=D.members.find(x=>x.id===+mm.value);upd(m.id,{status:"left",left_on:m.left_on||new Date().toISOString().slice(0,10),refund_status:rs.value,refund_amount:+ramt.value||null})};
 const reinstate=()=>upd(+mm.value,{status:"active",left_on:null,refund_status:null,refund_amount:null});
