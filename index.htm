@@ -31,7 +31,7 @@ const SUPABASE_ANON_KEY="sb_publishable_YOwidqPDngVirzOsJwtSpw_Jvh_lAvW";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const CAP=7500,YEAR=15000,A=document.getElementById("app");
 const f=n=>"KES "+Number(n).toLocaleString();
-let D={members:[],pays:[],admin:false,q:"",tab:"home",email:"",x:{ok:true,msgs:[],tg:[],els:[],opts:[],voted:[],off:[],res:{}}};let rec=/type=recovery/.test(location.hash);
+let D={members:[],pays:[],admin:false,q:"",tab:"home",fy:"all",fm:"all",email:"",x:{ok:true,msgs:[],tg:[],els:[],opts:[],voted:[],off:[],res:{}}};let rec=/type=recovery/.test(location.hash);
 
 function loginView(err,mode,ok){const up=mode==="up";A.innerHTML=`<div class="card login"><h1>Real Brothers 022</h1><p class="mu">${up?"Create your account with the email the Treasurer registered for you.":"Sign in to see your contributions."}</p>
 <div class="row"><input id="em" type="email" placeholder="Email (username)"><input id="pw" type="password" placeholder="Password">${up?`<input id="pw2" type="password" placeholder="Confirm password"><button onclick="signup()">Create account</button>`:`<button onclick="login()">Sign in</button>`}</div>
@@ -66,7 +66,7 @@ const g=k=>w[k]||0;return{sav,w1:g("W1-2025"),w2:g("W2-2025"),w3:g("W1-2026"),w4
 function status(v){return v>=YEAR?["Complete","ok"]:v>=CAP?["On track","ok"]:v>=CAP/2?["Behind","warn"]:["At risk","bad"]}
 const hdr=t=>`<header><h1>${t}</h1><button class="g" onclick="logout()">Sign out</button></header>${nav()}`;
 
-function render(){if(rec)return;if(D.tab==="msg")return msgView();if(D.tab==="vote")return voteView();
+function render(){if(rec)return;if(D.tab==="msg")return msgView();if(D.tab==="vote")return voteView();if(D.tab==="fin"&&D.admin)return finView();
 if(D.admin)return adminView();
 const m=D.members[0];if(!m)return A.innerHTML=hdr("Real Brothers 022")+'<div class="card">Your email is not linked to a member yet. Please ask the Treasurer.</div>';
 memberView(m)}
@@ -78,7 +78,7 @@ const risk=rows.filter(r=>status(r.c.d26)[1]==="bad").length,done=rows.filter(r=
 const opts=D.members.map(m=>`<option value="${m.id}">${m.name}${m.status==="left"?" (left)":""}</option>`).join("");
 const btn=m=>`<button class="g" onclick="rep(${m.id})">PDF</button> <button class="g" onclick="csv(${m.id})">CSV</button> <button class="g" onclick="mail(${m.id})">Email</button>`;
 const body=rows.filter(r=>r.m.name.toLowerCase().includes(D.q.toLowerCase())).map(({m,c})=>{const s=status(c.d26);
-return`<tr><td>${m.name}<br><span class="mu">${m.id_number?"Acc: "+m.id_number:"no ID number"}</span>${m.benefited?' <span class="tag ok">Benefited</span>':''}${m.email?"":' <span class="mu">(no email)</span>'}</td><td>${f(c.sav)}</td><td>${f(c.d25)}</td><td>${f(c.d26)}</td><td>${f(Math.max(0,YEAR-c.d26))}</td><td>${f(mon(m).owing)}</td><td>${f(dowOd(c))}</td><td><b>${f(bal(m).total)}</b></td><td><span class="tag ${s[1]}">${s[0]}</span></td><td>${btn(m)}</td></tr>`}).join("");
+return`<tr><td>${m.name}<br><span class="mu">${m.id_number?"Acc: "+m.id_number:"no ID number"}</span>${m.benefited?' <span class="tag ok">Benefited</span>':''}${m.email?"":' <span class="mu">(no email)</span>'}</td><td>${f(pp(m))}</td><td>${f(c.sav)}</td><td>${f(c.d25)}</td><td>${f(c.d26)}</td><td>${f(Math.max(0,YEAR-c.d26))}</td><td>${f(mon(m).owing)}</td><td>${f(dowOd(c))}</td><td><b>${f(bal(m).total)}</b></td><td><span class="tag ${s[1]}">${s[0]}</span></td><td>${btn(m)}</td></tr>`}).join("");
 const benT=ben.map(({m})=>`<tr><td>${m.name}</td><td>${m.benefit_amount?f(m.benefit_amount):"-"}</td><td>${m.benefit_date||"-"}</td><td>${m.status==="left"?"Left":"Active"}</td></tr>`).join("")||'<tr><td colspan="4" class="mu">None recorded yet.</td></tr>';
 const leftT=left.map(({m,c})=>`<tr><td>${m.name}</td><td>${f(c.d25+c.d26)}</td><td>${m.left_on||"-"}</td><td><span class="tag ${m.refund_status==="refunded"?"ok":"warn"}">${m.refund_status==="refunded"?"Refunded":"Not refunded"}</span></td><td>${m.refund_amount?f(m.refund_amount):"-"}</td><td>${btn(m)}</td></tr>`).join("")||'<tr><td colspan="6" class="mu">No former members recorded.</td></tr>';
 A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
@@ -91,6 +91,7 @@ A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
 <select id="pt"><option value="savings">Monthly savings (200)</option><option value="dowry">Dowry contribution (1,250)</option></select>
 <input id="pa" type="number" min="1" placeholder="Amount"><button onclick="pay()">Add</button></div>
 <p class="mu">Dowry payments fill Wave 1 2026 up to 7,500, then Wave 2 2026.</p></div>
+<div class="card"><h2>Attendance (who was absent)</h2><div class="row"><select id="am" onchange="attList()">${attMonths()}</select></div><div id="al"></div><p class="mu">Rules: present and paid 200. Present but not paid 300 (200 + 100). Absent and paid 400. Absent and not paid 500. Ticked names are treated as absent.</p></div>
 <div class="card"><h2>Add a member</h2><div class="row"><input id="nm" placeholder="Full name"><input id="ne" type="email" placeholder="Login email (username)"><input id="ni" placeholder="ID number (account no.)">
 <select id="ns"><option value="active">Active member</option><option value="left">Former member (left)</option></select>
 <label class="mu"><input id="nb" type="checkbox" style="min-width:0"> Already benefited</label><button onclick="addMember()">Add member</button></div></div>
@@ -102,12 +103,12 @@ A.innerHTML=hdr("Admin dashboard")+`<div class="grid">
 <div class="card"><h2>Member login (email) and account number (ID)</h2><div class="row"><select id="em2">${D.members.map(m=>`<option value="${m.id}">${m.name}${m.email?" ("+m.email+")":""}</option>`).join("")}</select>
 <input id="em3" type="email" placeholder="Login email (username)"><input id="em4" placeholder="ID number (account no.)"><button onclick="setEmail()">Save</button></div>
 <p class="mu">Create the member's login in Supabase (Authentication > Users) with this same email.</p></div>
-<div class="card"><h2>Active members</h2><div class="row"><input id="q" placeholder="Search member" value="${D.q}" oninput="D.q=this.value;adminView();q.focus()"></div>
-<div class="tw"><table><tr><th>Member</th><th>Savings</th><th>Dowry 2025</th><th>Dowry 2026</th><th>Balance to 15,000</th><th>Monthly owing</th><th>Dowry overdue</th><th>Total owing</th><th>Status</th><th>Report</th></tr>${body}</table></div>
+<div class="card"><h2>Active members</h2>${flt()}<div class="row"><input id="q" placeholder="Search member" value="${D.q}" oninput="D.q=this.value;adminView();q.focus()"></div>
+<div class="tw"><table><tr><th>Member</th><th>Paid in period</th><th>Savings</th><th>Dowry 2025</th><th>Dowry 2026</th><th>Balance to 15,000</th><th>Monthly owing</th><th>Dowry overdue</th><th>Total owing</th><th>Status</th><th>Report</th></tr>${body}</table></div>
 <p class="mu">On track = 7,500 or more (June target). Behind = 3,750 to 7,499. At risk = below 3,750.</p></div>
 <div class="card"><h2>Members who have benefited</h2><div class="tw"><table><tr><th>Member</th><th>Amount</th><th>Date</th><th>Now</th></tr>${benT}</table></div></div>
 <div class="card"><h2>Former members</h2><div class="tw"><table><tr><th>Member</th><th>Dowry paid</th><th>Left on</th><th>Refund</th><th>Refund amount</th><th>Report</th></tr>${leftT}</table></div></div>`;
-if(document.getElementById("mm"))hint()}
+if(document.getElementById("mm"))hint();attList()}
 const upd=async(id,o)=>{const {error}=await sb.from("members").update(o).eq("id",id);if(error)return alert(error.message);load()};
 const saveBenefit=()=>upd(+mm.value,{benefited:true,benefit_amount:+bamt.value||null,benefit_date:bdt.value||null});
 const clearBenefit=()=>upd(+mm.value,{benefited:false,benefit_amount:null,benefit_date:null});
@@ -137,6 +138,7 @@ A.innerHTML=hdr("Hello, "+m.name.split(" ")[0])+`<p class="mu">Account no: ${m.i
 <div class="card"><h2>Dowry waves</h2><div class="tw"><table><tr><th>Wave</th><th>Paid (of 7,500)</th><th>Progress</th></tr>
 ${w("Wave 1 2025",c.w1)}${w("Wave 2 2025",c.w2)}${w("Wave 1 2026",c.w3)}${w("Wave 2 2026",c.w4)}</table></div></div>
 <div class="card"><h2>Recent payments</h2>${c.log.slice(0,8).map(l=>`<div class="row mu"><span>${l.paid_on}</span><span>${l.kind==="savings"?"Savings":"Dowry"}</span><span>${f(l.amount)}</span></div>`).join("")||'<p class="mu">No payments yet.</p>'}</div>
+${myContrib(m)}
 <div class="card"><h2>Balance summary</h2>${balT(m)}</div>
 <div class="card"><h2>Monthly contributions (200 per month)</h2>${monT(m)}</div>
 <div class="card"><h2>My statement</h2><div class="row"><button onclick="rep(${m.id})">Print / save as PDF</button><button class="g" onclick="csv(${m.id})">Download CSV</button></div></div>
@@ -147,20 +149,21 @@ const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWEAAAFaCAIAAABAIHvuAA
 const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const WV=[["Wave 1 2025",new Date(2025,5,30,23,59),"30 Jun 2025"],["Wave 2 2025",new Date(2025,11,31,23,59),"31 Dec 2025"],["Wave 1 2026",new Date(2026,5,30,23,59),"30 Jun 2026"],["Wave 2 2026",new Date(2026,11,31,23,59),"31 Dec 2026"]];
 function mon(m){const n=new Date(),st=2025*12+11,en=Math.max(n.getFullYear()*12+n.getMonth(),st),pay={};
-D.pays.forEach(x=>{if(x.member_id===m.id&&x.kind==="savings"){const p=x.paid_on.split("-"),k=Math.max(+p[0]*12+(+p[1]-1),st);pay[k]=(pay[k]||0)+ +x.amount}});
-const rows=[];let cp=0,cd=0;for(let k=st;k<=en;k++){const p=pay[k]||0,pen=p===0&&k<en?100:0;cp+=p;cd+=200+pen;rows.push({l:MN[k%12]+" "+Math.floor(k/12),p,d:200+pen,pen,cp,cd,bal:cp-cd})}
+D.pays.forEach(x=>{if(x.member_id===m.id&&x.kind==="savings"){const p=x.paid_on.split("-"),k=+p[0]*12+(+p[1]-1);if(k>=st)pay[k]=(pay[k]||0)+ +x.amount}});
+const held=D.pays.some(x=>{if(x.kind!=="savings")return false;const q=x.paid_on.split("-");return +q[0]*12+(+q[1]-1)===en});
+const rows=[];let cp=0,cd=0;for(let k=st;k<=en;k++){const p=pay[k]||0,key=Math.floor(k/12)+"-"+String(k%12+1).padStart(2,"0"),ar=(D.x.att||[]).find(a=>a.member_id===m.id&&a.month===key),abs=ar?ar.absent:p===400,pen=p===0&&(k<en||held)?100:0,dd=200+(abs?200:0)+pen;cp+=p;cd+=dd;rows.push({l:MN[k%12]+" "+Math.floor(k/12),p,d:dd,pen,abs,cp,cd,bal:cp-cd})}
 rows.forEach(x=>x.cv=[]);
 rows.forEach((x,i)=>{const j=rows.findIndex((y,t)=>t>=i&&y.cp>=x.cd);if(j<0)x.cl="Unpaid";else{x.cl=j===i?(x.p>0?"Paid on time":"Covered by earlier payment"):"Paid in "+rows[j].l+" (late)";if(j!==i)rows[j].cv.push(x.l)}});
 const last=rows[rows.length-1];return{rows,owing:Math.max(0,-last.bal),credit:Math.max(0,last.bal)}}
-function monT(m){const q=mon(m);return`<div class="tw"><table class="mt"><tr><th>Month</th><th>Due</th><th>Paid this month</th><th>Balance</th><th class="t">Status</th><th class="t">This payment also covers</th></tr>${q.rows.map(x=>`<tr><td>${x.l}</td><td>${f(x.d)}${x.pen?" (incl. 100 penalty)":""}</td><td>${x.p?f(x.p):"-"}</td><td>${x.bal<0?"Owing "+f(-x.bal):x.bal>0?"Credit "+f(x.bal):"Nil"}</td><td class="t">${x.cl}</td><td class="t">${x.cv.length?x.cv.join(", "):""}</td></tr>`).join("")}</table></div><p class="mu">Monthly contributions owing now: ${f(q.owing)}${q.credit?" · Extra/credit (fines or advance): "+f(q.credit):""}</p>`}
+function monT(m){const q=mon(m);return`<div class="tw"><table class="mt"><tr><th>Month</th><th>Due</th><th>Paid this month</th><th>Balance</th><th class="t">Status</th><th class="t">This payment also covers</th></tr>${q.rows.map(x=>`<tr><td>${x.l}</td><td>${f(x.d)}${x.abs||x.pen?`<br><small>${[x.abs?"absent +200":"",x.pen?"not paid at meeting +100":""].filter(Boolean).join(", ")}</small>`:""}</td><td>${x.p?f(x.p):"-"}</td><td>${x.bal<0?"Owing "+f(-x.bal):x.bal>0?"Credit "+f(x.bal):"Nil"}</td><td class="t">${x.cl}</td><td class="t">${x.cv.length?x.cv.join(", "):""}</td></tr>`).join("")}</table></div><p class="mu">Monthly contributions owing now: ${f(q.owing)}${q.credit?" · Extra/credit (fines or advance): "+f(q.credit):""}</p>`}
 function dowOd(c){return WV.reduce((a,x,i)=>a+(new Date()>=x[1]?Math.max(0,CAP-[c.w1,c.w2,c.w3,c.w4][i]):0),0)}
 function bal(m){const c=calc(m),q=mon(m),ws=[c.w1,c.w2,c.w3,c.w4],L=q.rows[q.rows.length-1];let dd=0,dp=0,od=0;
 WV.forEach((x,i)=>{if(new Date()>=x[1]){dd+=CAP;dp+=Math.min(CAP,ws[i]);od+=Math.max(0,CAP-ws[i])}});
-return{mdue:L.cd,mpaid:L.cp,mowe:q.owing,mcred:q.credit,dd,dp,od,up:ws[3],pt:q.rows.reduce((a,r)=>a+r.pen,0),total:q.owing+od}}
+return{mdue:L.cd,mpaid:L.cp,mowe:q.owing,mcred:q.credit,dd,dp,od,up:ws[3],pt:q.rows.reduce((a,r)=>a+r.pen+(r.abs?200:0),0),total:q.owing+od}}
 function balT(m){const b=bal(m);return`<div class="tw"><table class="bs"><tr><th></th><th>Due to date</th><th>Paid</th><th>Balance owing</th></tr>
 <tr><td>Monthly contributions + penalties</td><td>${f(b.mdue)}</td><td>${f(b.mpaid)}</td><td>${f(b.mowe)}</td></tr>
 <tr><td>Dowry waves due so far (7,500 each)</td><td>${f(b.dd)}</td><td>${f(b.dp)}</td><td>${f(b.od)}</td></tr>
-<tr><td><b>Total owing now</b></td><td></td><td></td><td><b>${f(b.total)}</b></td></tr></table></div><p class="mu">Penalties included: ${f(b.pt)} (KES 100 for each past month with no payment at the meeting). Wave 2 2026 (7,500, due 31 Dec 2026): paid ${f(b.up)}.${b.mcred?" Extra/credit on monthly: "+f(b.mcred)+" (fines or advance).":""}</p>`}
+<tr><td><b>Total owing now</b></td><td></td><td></td><td><b>${f(b.total)}</b></td></tr></table></div><p class="mu">Penalties included: ${f(b.pt)} (200 for absence, and 100 when not paid at the meeting). Wave 2 2026 (7,500, due 31 Dec 2026): paid ${f(b.up)}.${b.mcred?" Extra/credit on monthly: "+f(b.mcred)+" (fines or advance).":""}</p>`}
 function mail(id){const m=D.members.find(x=>x.id===id);if(!m.email)return alert("Add this member's email first (Member login box).");
 const b=bal(m),site=location.origin+location.pathname;
 const t=`Dear ${m.name},\n\nREAL BROTHERS 022 - account summary${m.id_number?" (Account no: "+m.id_number+")":""}\n\nMonthly contributions + penalties owing: ${f(b.mowe)}\nDowry overdue: ${f(b.od)}\nTOTAL OWING NOW: ${f(b.total)}\nWave 2 2026 paid so far: ${f(b.up)} of 7,500 (due 31 Dec 2026)\n\nSign in to see your full statement: ${site}\nUsername: ${m.email}\n\nThank you,\nTreasurer, REAL BROTHERS 022\nrealbrothers022@gmail.com`;
@@ -169,11 +172,11 @@ const POS=["Chair","Vice Chair","Treasurer","Secretary","Vice Secretary","Coordi
 const esc=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const me=()=>{const m=D.members.find(x=>(x.email||"").toLowerCase()===(D.email||"").toLowerCase());return m?m.id:null};
 const closed=el=>el.status==="closed"||(el.closes_at&&new Date(el.closes_at)<=new Date());
-const nav=()=>{const u=D.admin?0:D.x.tg.filter(t=>!t.read).length,b=t=>D.tab===t?"":"g";return`<div class="row"><button class="${b("home")}" onclick="tab('home')">Dashboard</button><button class="${b("msg")}" onclick="tab('msg')">Messages${u?" ("+u+" new)":""}</button><button class="${b("vote")}" onclick="tab('vote')">Voting</button></div>`};
+const nav=()=>{const u=D.admin?0:D.x.tg.filter(t=>!t.read).length,b=t=>D.tab===t?"":"g";return`<div class="row"><button class="${b("home")}" onclick="tab('home')">Dashboard</button><button class="${b("msg")}" onclick="tab('msg')">Messages${u?" ("+u+" new)":""}</button><button class="${b("vote")}" onclick="tab('vote')">Voting</button>${D.admin?`<button class="${b("fin")}" onclick="tab('fin')">Finance</button>`:""}</div>`};
 const tab=t=>{D.tab=t;render()};
 async function loadX(){const q=t=>sb.from(t).select("*");
-const r=await Promise.all([q("messages").order("id",{ascending:false}),q("message_targets"),q("elections").order("id",{ascending:false}),q("options").order("id"),q("voted"),q("officers").order("sort")]);
-const x={ok:!r.some(z=>z.error),msgs:r[0].data||[],tg:r[1].data||[],els:r[2].data||[],opts:r[3].data||[],voted:r[4].data||[],off:r[5].data||[],res:{}};
+const r=await Promise.all([q("messages").order("id",{ascending:false}),q("message_targets"),q("elections").order("id",{ascending:false}),q("options").order("id"),q("voted"),q("officers").order("sort"),q("attendance"),q("ledger").order("entry_date",{ascending:false})]);
+const x={ok:!r.slice(0,6).some(z=>z.error),msgs:r[0].data||[],tg:r[1].data||[],els:r[2].data||[],opts:r[3].data||[],voted:r[4].data||[],off:r[5].data||[],att:r[6].data||[],led:r[7].data||[],res:{}};
 await Promise.all(x.els.filter(closed).map(async el=>{const g=await sb.rpc("results",{p_election:el.id});x.res[el.id]=g.data||[]}));D.x=x}
 const setup='<div class="card">Messages and voting are not switched on yet. Run vote-and-messages.sql in Supabase (SQL Editor), then refresh.</div>';
 function msgView(){const M=me();let h=hdr("Messages");if(!D.x.ok)return A.innerHTML=h+setup;
@@ -215,6 +218,63 @@ const {data,error}=await sb.from("elections").insert({title:vt.value.trim()||(po
 const e2=(await sb.from("options").insert(lab.map(l=>({election_id:data.id,label:l})))).error;if(e2)return alert(e2.message);await loadX();render()}
 async function saveOff(){const rows=D.x.off.map((o,i)=>({position:o.position,holder:document.getElementById("of"+i).value.trim()||null,sort:o.sort}));
 const {error}=await sb.from("officers").upsert(rows);if(error)return alert(error.message);await loadX();render()}
+function attMonths(){const n=new Date(),en=n.getFullYear()*12+n.getMonth();let o="";for(let k=en;k>=2025*12+11;k--)o+=`<option value="${Math.floor(k/12)+"-"+String(k%12+1).padStart(2,"0")}">${MN[k%12]} ${Math.floor(k/12)}</option>`;return o}
+function attList(){const sel=document.getElementById("am"),box=document.getElementById("al");if(!sel||!box)return;const key=sel.value;
+box.innerHTML=D.members.filter(m=>m.status!=="left").map(m=>{const p=D.pays.filter(x=>x.member_id===m.id&&x.kind==="savings"&&x.paid_on.slice(0,7)===key).reduce((a,x)=>a+ +x.amount,0),ar=(D.x.att||[]).find(a=>a.member_id===m.id&&a.month===key),chk=ar?ar.absent:p===400;
+return`<label style="display:inline-block;width:48%;min-width:150px;margin:3px 0"><input type="checkbox" class="ab" data-id="${m.id}" ${chk?"checked":""} style="min-width:0"> ${esc(m.name)}</label>`}).join("")+'<p><button onclick="saveAtt()">Save attendance</button></p>'}
+async function saveAtt(){const key=am.value,rows=[...document.querySelectorAll(".ab")].map(c=>({member_id:+c.dataset.id,month:key,absent:c.checked}));
+const {error}=await sb.from("attendance").upsert(rows,{onConflict:"member_id,month"});if(error)return alert(error.message.includes("attendance")?"Run update-sheet.sql in Supabase first.":error.message);await loadX();render()}
+const inP=d=>{const y=d.slice(0,4),m=d.slice(5,7);return(D.fy==="all"||y===D.fy)&&(D.fm==="all"||m===D.fm)};
+const pp=m=>D.pays.filter(x=>x.member_id===m.id&&inP(x.paid_on)).reduce((a,x)=>a+ +x.amount,0);
+const flt=()=>{const y=new Date().getFullYear();let yo=`<option value="all" ${D.fy==="all"?"selected":""}>All years</option>`;for(let i=y;i>=2022;i--)yo+=`<option ${D.fy==String(i)?"selected":""}>${i}</option>`;
+const mo=`<option value="all">All months</option>`+MN.map((n,i)=>{const v=String(i+1).padStart(2,"0");return`<option value="${v}" ${D.fm===v?"selected":""}>${n}</option>`}).join("");
+return`<div class="row"><select onchange="D.fy=this.value;render()">${yo}</select><select onchange="D.fm=this.value;render()">${mo}</select></div>`};
+function myContrib(m){const P=D.pays.filter(x=>x.member_id===m.id),all=a=>a.reduce((s,x)=>s+ +x.amount,0),sv=P.filter(x=>x.kind==="savings"),dw=P.filter(x=>x.kind==="dowry"),pr=P.filter(x=>inP(x.paid_on));
+return`<div class="card"><h2>What I have contributed</h2><div class="grid"><div class="k"><small>Savings and penalties paid, to date</small><b>${f(all(sv))}</b></div><div class="k"><small>Dowry paid, to date</small><b>${f(all(dw))}</b></div><div class="k"><small>Total contributed to date</small><b>${f(all(P))}</b></div></div>${flt()}
+<p class="mu">In the selected period: savings ${f(all(pr.filter(x=>x.kind==="savings")))} · dowry ${f(all(pr.filter(x=>x.kind==="dowry")))} · total ${f(all(pr))}</p>
+<div class="tw"><table><tr><th class="t">Date</th><th class="t">Type</th><th class="t">Wave</th><th>Amount</th></tr>${pr.slice().sort((a,b)=>a.paid_on<b.paid_on?1:-1).map(x=>`<tr><td class="t">${x.paid_on}</td><td class="t">${x.kind==="savings"?"Savings":"Dowry"}</td><td class="t">${x.wave||""}</td><td>${f(x.amount)}</td></tr>`).join("")||'<tr><td colspan="4" class="mu">Nothing in this period.</td></tr>'}</table></div></div>`}
+const KL={opening:"Opening balance",other_income:"Other income",expense:"Expense",refund:"Refund to member",payout:"Dowry payout",deposit_placed:"Fixed deposit placed",deposit_returned:"Fixed deposit returned"};
+function fin(){const L=D.x.led||[],mo=D.fy==="all"?"all":D.fm;let S="0000-00-00",E="9999-12-31";
+if(D.fy!=="all"){S=D.fy+"-"+(mo==="all"?"01":mo)+"-01";E=D.fy+"-"+(mo==="all"?"12":mo)+"-31"}
+const ev=[];D.pays.forEach(x=>ev.push({d:x.paid_on,k:x.kind==="savings"?"sav":"dow",a:+x.amount}));L.forEach(x=>ev.push({d:x.entry_date,k:x.kind,a:+x.amount}));
+const sg={sav:1,dow:1,opening:1,other_income:1,deposit_returned:1,expense:-1,refund:-1,payout:-1,deposit_placed:-1};
+const od=L.filter(x=>x.kind==="opening").map(x=>x.entry_date).sort().pop()||"0000-00-00",ev2=ev.filter(e=>e.k==="opening"?e.d===od:e.d>=od);
+const bf=ev2.filter(e=>e.d<S).reduce((s,e)=>s+sg[e.k]*e.a,0),per=ev2.filter(e=>e.d>=S&&e.d<=E),g=k=>per.filter(e=>e.k===k).reduce((s,e)=>s+e.a,0);
+const inv=ev2.filter(e=>e.d<=E&&(e.k==="deposit_placed"||e.k==="deposit_returned")).reduce((s,e)=>s+(e.k==="deposit_placed"?e.a:-e.a),0);
+const r={bf,sav:g("sav"),dow:g("dow"),op:g("opening"),oi:g("other_income"),dr:g("deposit_returned"),ex:g("expense"),rf:g("refund"),po:g("payout"),dp:g("deposit_placed"),inv};
+r.close=bf+r.sav+r.dow+r.op+r.oi+r.dr-r.ex-r.rf-r.po-r.dp;return r}
+function finView(){const r=fin(),L=(D.x.led||[]).filter(x=>inP(x.entry_date)),P=D.pays;
+const row=(l,v,b)=>`<tr><td class="t">${b?"<b>"+l+"</b>":l}</td><td>${b?"<b>"+f(v)+"</b>":f(v)}</td></tr>`;
+const due=D.members.filter(m=>m.status==="left"&&m.refund_status!=="refunded");
+let h=hdr("Group finance")+`<div class="card"><h2>Balance available</h2>${flt()}${D.fy==="all"&&D.fm!=="all"?'<p class="mu">Choose a year to use the month filter.</p>':""}
+<div class="tw"><table class="bs"><tr><th class="t">Line</th><th>KES</th></tr>${row("Brought forward",r.bf)}${row("+ Savings and penalties paid by members",r.sav)}${row("+ Dowry contributions",r.dow)}${row("+ Other income (fixed deposit interest, etc.)",r.oi)}${row("+ Fixed deposits returned",r.dr)}${r.op?row("+ Opening balance entered",r.op):""}${row("- Dowry payouts",r.po)}${row("- Expenses",r.ex)}${row("- Refunds to members",r.rf)}${row("- Fixed deposits placed",r.dp)}${row("= Balance available",r.close,1)}</table></div>
+<p class="mu">Money tied up in fixed deposits (to the end of this period): ${f(r.inv)}. Total including fixed deposits: ${f(r.close+r.inv)}. Anything dated before your latest Opening balance entry is not counted here, because that balance already includes it.</p></div>
+<div class="card"><h2>Add an entry</h2><div class="row"><select id="lk">${Object.keys(KL).map(k=>`<option value="${k}">${KL[k]}</option>`).join("")}</select><input id="ld" type="date"><input id="la" type="number" min="1" placeholder="Amount"></div>
+<div class="row"><input id="lc" placeholder="Category (e.g. Fixed deposit interest, Transport)"><input id="ln" placeholder="Description"><select id="lm"><option value="">No member</option>${D.members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></div>
+<button onclick="addEntry()">Save entry</button><p class="mu">Choose a member for a dowry payout or a refund, and that member is marked automatically. Enter the opening balance once as "Opening balance", dated at the start of the records.</p></div>`;
+if(due.length)h+=`<div class="card"><h2>Refunds still to pay</h2><div class="tw"><table><tr><th class="t">Member</th><th>Dowry paid</th><th>Refund (50%)</th><th></th></tr>${due.map(m=>{const t=P.filter(x=>x.member_id===m.id&&x.kind==="dowry").reduce((s,x)=>s+ +x.amount,0);return`<tr><td class="t">${esc(m.name)}</td><td>${f(t)}</td><td>${f(m.refund_amount||t/2)}</td><td><button class="g" onclick="payRefund(${m.id})">Record refund</button></td></tr>`}).join("")}</table></div></div>`;
+h+=`<div class="card"><h2>Entries in this period</h2><div class="tw"><table><tr><th class="t">Date</th><th class="t">Type</th><th class="t">Details</th><th>Amount</th><th></th></tr>${L.map(x=>{const mm=D.members.find(m=>m.id===x.member_id);return`<tr><td class="t">${x.entry_date}</td><td class="t">${KL[x.kind]}</td><td class="t">${esc([x.category,x.description,mm&&mm.name].filter(Boolean).join(" · "))}</td><td>${f(x.amount)}</td><td><button class="g" onclick="delEntry(${x.id})">Delete</button></td></tr>`}).join("")||'<tr><td colspan="5" class="mu">No entries in this period.</td></tr>'}</table></div></div>
+<div class="card"><h2>Import payments from a file (CSV)</h2><textarea id="csvIn" rows="4" placeholder="name,date,type,amount,wave,note&#10;James Kithome,2023-03,savings,200&#10;James Kithome,2023-06-30,dowry,7500,W1-2023"></textarea>
+<p class="mu">Use for 2023 and 2024 history. Type is savings or dowry. The date can be 2023-03 or 2023-03-15. Names must match the member list.</p><button onclick="importCsv()">Import</button></div>`;
+A.innerHTML=h}
+async function addEntry(){const a=+la.value;if(!(a>0))return alert("Enter an amount.");const k=lk.value,mid=lm.value?+lm.value:null,d=ld.value||new Date().toISOString().slice(0,10);
+const {error}=await sb.from("ledger").insert({kind:k,entry_date:d,category:lc.value.trim()||null,description:ln.value.trim()||null,amount:a,member_id:mid});
+if(error)return alert(error.message.includes("ledger")?"Run finance.sql in Supabase first.":error.message);
+if(mid&&k==="payout")await sb.from("members").update({benefited:true,benefit_amount:a,benefit_date:d}).eq("id",mid);
+if(mid&&k==="refund")await sb.from("members").update({refund_status:"refunded",refund_amount:a}).eq("id",mid);
+await load()}
+async function payRefund(id){const m=D.members.find(x=>x.id===id),t=D.pays.filter(x=>x.member_id===id&&x.kind==="dowry").reduce((s,x)=>s+ +x.amount,0),a=m.refund_amount||t/2;
+if(!confirm("Record a refund of "+f(a)+" to "+m.name+"?"))return;
+const {error}=await sb.from("ledger").insert({kind:"refund",entry_date:new Date().toISOString().slice(0,10),category:"Refund",description:"Refund to "+m.name,amount:a,member_id:id});if(error)return alert(error.message);
+await sb.from("members").update({refund_status:"refunded",refund_amount:a}).eq("id",id);await load()}
+async function delEntry(id){if(!confirm("Delete this entry?"))return;await sb.from("ledger").delete().eq("id",id);await loadX();render()}
+async function importCsv(){const mp={};D.members.forEach(m=>mp[m.name.toLowerCase()]=m.id);const rows=[],bad=[];
+csvIn.value.split(/\r?\n/).forEach(l=>{const c=l.split(",").map(x=>x.trim());if(c.length<4||c[0].toLowerCase()==="name")return;
+let d=c[1];if(/^\d{4}-\d{2}$/.test(d))d+="-01";const id=mp[c[0].toLowerCase()],t=c[2].toLowerCase(),a=+c[3];
+if(!id||!/^\d{4}-\d{2}-\d{2}$/.test(d)||!["savings","dowry"].includes(t)||!(a>0))return bad.push(l);
+rows.push({member_id:id,kind:t,amount:a,paid_on:d,wave:c[4]||null,note:c[5]||"Imported"})});
+if(bad.length&&!confirm(bad.length+" line(s) cannot be read and will be skipped:\n"+bad.slice(0,5).join("\n")+"\nContinue with the "+rows.length+" good lines?"))return;
+if(!rows.length)return alert("Nothing to import.");const {error}=await sb.from("payments").insert(rows);if(error)return alert(error.message);csvIn.value="";await load()}
 function csv(id){const m=D.members.find(x=>x.id===id),c=calc(m);
 const r=[["Real Brothers 022 statement"],["Member",m.name],["Account no",m.id_number||""],["Date",new Date().toLocaleDateString()],[],["Savings",c.sav],["Dowry 2025",c.d25],["Dowry 2026",c.d26],["Balance to 15000",Math.max(0,YEAR-c.d26)],["Monthly contributions owing",bal(m).mowe],["Dowry overdue now",bal(m).od],["TOTAL OWING NOW",bal(m).total]];
 r.push([],["Month","Paid","Cumulative paid","Cumulative due","Position (+credit / -owing)","Status","Also covers"]);mon(m).rows.forEach(x=>r.push([x.l,x.p,x.cp,x.cd,x.bal,x.cl,x.cv.join(" ")]));r.push([],["Date","Type","Wave","Amount","Note"]);c.log.slice().reverse().forEach(l=>r.push([l.paid_on,l.kind,l.wave||"",l.amount,l.note||""]));
@@ -255,7 +315,7 @@ td{padding:6px 9px;border:1px solid #d5dcd8;text-align:left}tr:nth-child(even) t
 <h2>Dowry balances (7,500 per wave)</h2><table class="dw"><tr><th>Wave</th><th>Due by</th><th>Paid</th><th>Balance</th><th>Status</th></tr>${wr}</table>
 <h2>Payment history</h2><table class="hist"><tr><th>Date</th><th>Type</th><th>Wave</th><th>Amount</th><th>Note</th></tr>${pr}</table>
 <div class="sg"><div>Treasurer</div><div>Chair</div></div>
-<div class="ft">REAL BROTHERS 022 &middot; realbrothers022@gmail.com &middot; Computer-generated statement. Penalties: KES 100 for each month with no payment at the meeting. Please report any difference to the Treasurer.</div>
+<div class="ft">REAL BROTHERS 022 &middot; realbrothers022@gmail.com &middot; Computer-generated statement. Penalties: absent 200; KES 100 more if not paid at the meeting. Please report any difference to the Treasurer.</div>
 </body></html>`);
 w.document.close();w.focus();setTimeout(()=>w.print(),300)}
 sb.auth.getSession().then(({data})=>{if(rec)return;data.session?load():loginView()});
