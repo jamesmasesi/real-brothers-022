@@ -270,7 +270,7 @@ var init_utils = __esm({
       };
     };
     bar = (p, c = "") => raw(`<div class="bar big"><i style="width:${Math.max(0, Math.min(100, p))}%;${c ? "background:" + c : ""}"></i></div>`);
-    badge = (t, kind = "") => h`<span class="badge ${kind}">${t}</span>`;
+    badge = (t, kind2 = "") => h`<span class="badge ${kind2}">${t}</span>`;
     statusKind = (s) => ({ Complete: "ok", "On Track": "ok", Behind: "warn", "At Risk": "bad" })[s] || "";
     YEARS = () => {
       const y = (/* @__PURE__ */ new Date()).getFullYear(), a = [];
@@ -822,7 +822,7 @@ async function build(tab) {
   if (tab === "monthly") {
     const ks = [...new Set(c.posted.map((p) => monthKey(p.paid_on)))].filter((k) => inPeriod(k + "-01")).sort().reverse();
     return { t: "Monthly collection report", cols: ["Month", "Savings", "Dowry", "Penalties and other", "Total"], rows: ks.map((k) => {
-      const x = (kind) => sum(c.posted.filter((p) => monthKey(p.paid_on) === k && (kind === "o" ? p.kind === "penalty" || p.kind === "other" : p.kind === kind)), (p) => p.amount);
+      const x = (kind2) => sum(c.posted.filter((p) => monthKey(p.paid_on) === k && (kind2 === "o" ? p.kind === "penalty" || p.kind === "other" : p.kind === kind2)), (p) => p.amount);
       return [MON[+k.slice(5) - 1] + " " + k.slice(0, 4), x("savings"), x("dowry"), x("o"), x("savings") + x("dowry") + x("o")];
     }), money: [1, 2, 3, 4], total: true };
   }
@@ -859,14 +859,18 @@ var done = async (msg) => {
   await hooks.refresh();
 };
 var nz = (v) => v == null || String(v).trim() === "" ? null : String(v).trim();
-var memberFields = (m = {}) => [
+var memberFields = (m = {}, withEmail = true) => [
   { name: "name", label: "Full name", value: m.name, required: true },
   { name: "email", label: "Login email (username)", type: "email", value: m.email },
   { name: "id_number", label: "Account number (ID number)", value: m.id_number },
   { name: "phone", label: "Phone", value: m.phone },
   { name: "joined_on", label: "Joined on", type: "date", value: m.joined_on }
-];
-var toRow = (o) => ({ name: nz(o.name), email: nz(o.email) && nz(o.email).toLowerCase(), id_number: nz(o.id_number), phone: nz(o.phone), joined_on: nz(o.joined_on) });
+].filter((f) => withEmail || f.name !== "email");
+var toRow = (o) => {
+  const r = { name: nz(o.name), id_number: nz(o.id_number), phone: nz(o.phone), joined_on: nz(o.joined_on) };
+  if ("email" in o) r.email = nz(o.email) && nz(o.email).toLowerCase();
+  return r;
+};
 actions["member-add"] = async (el) => {
   const o = await ask({ title: "Add a member", fields: memberFields(), ok: "Add member" });
   if (!o) return;
@@ -877,7 +881,7 @@ actions["member-add"] = async (el) => {
 };
 actions["member-edit"] = async (el) => {
   const m = core().members.find((x) => x.id === +el.dataset.id);
-  const o = await ask({ title: "Edit member", fields: memberFields(m), ok: "Save changes" });
+  const o = await ask({ title: "Edit member", fields: memberFields(m, false), ok: "Save changes" });
   if (!o) return;
   await busy(el, async () => {
     await q(sb.from("members").update(toRow(o)).eq("id", m.id));
@@ -895,6 +899,15 @@ async function recordPayout(m, amount, date) {
   }
   return true;
 }
+actions["member-email"] = async (el) => {
+  const m = core().members.find((x) => x.id === +el.dataset.id);
+  const o = await ask({ title: "Change login email", message: `${m.name} now signs in with ${m.email || "no email"}. After this change their old login stops working for this record. They must create an account (or sign in) with the NEW email, and are linked automatically.`, fields: [{ name: "email", label: "New email", type: "email", required: true }], reason: true, ok: "Change email", danger: true });
+  if (!o) return;
+  await busy(el, async () => {
+    await rpc("admin_change_member_email", { p_member: m.id, p_email: o.email, p_reason: o.reason });
+    await done("Login email changed. Ask the member to sign in with the new email.");
+  });
+};
 actions["member-payout"] = async (el) => {
   const m = core().members.find((x) => x.id === +el.dataset.id);
   const o = await ask({ title: "Record dowry payout", message: `Payout to ${m.name}. This is deducted from the group balance.`, fields: [{ name: "amount", label: "Amount (KES)", type: "number", value: core().S.payout_amount, required: true }, { name: "date", label: "Date", type: "date", value: today(), required: true }], ok: "Record payout" });
@@ -973,6 +986,7 @@ async function detail(id) {
   const pr = periodRows(m);
   const acts = [
     h`<button class="btn sm ghost" data-act="member-edit" data-id="${m.id}">Edit details</button>`,
+    h`<button class="btn sm ghost" data-act="member-email" data-id="${m.id}">Change login email</button>`,
     h`<button class="btn sm ghost" data-act="stmt-open" data-id="${m.id}">${icon("print")} Statement</button>`,
     h`<button class="btn sm ghost" data-act="stmt-csv" data-id="${m.id}">${icon("down")} CSV</button>`
   ];
@@ -990,13 +1004,18 @@ async function detail(id) {
   <div class="card"><h2>Dowry waves</h2><div class="tw"><table><thead><tr><th>Wave</th><th>Due by</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>${pr.map((x) => h`<tr><td>${x.label}</td><td>${fdate(x.p.due_date)}</td><td>${kes(x.paid)}</td><td>${kes(x.bal)}</td><td>${badge(x.st, x.st === "Cleared" ? "ok" : x.st === "Overdue" ? "bad" : "")}</td></tr>`)}</tbody></table></div></div>
   <div class="card"><h2>Monthly contributions and fines</h2><p class="mu">Owing ${kes(sp.owing)}${sp.credit ? " \xB7 credit " + kes(sp.credit) : ""} \u00b7 fines assessed ${kes(sp.fines)}</p><div class="tw"><table><thead><tr><th>Month</th><th>Due</th><th>Paid</th><th>Balance</th><th class="t">Status</th></tr></thead><tbody>${sp.rows.map((x) => h`<tr><td>${x.label}</td><td>${kes(x.d)}${x.abs || x.late || x.unpaid ? h`<div class="mu">${[x.abs ? "absent" : "", x.late ? "late" : "", x.unpaid ? "not paid at meeting" : ""].filter(Boolean).join(", ")}</div>` : ""}</td><td>${x.p ? kes(x.p) : "-"}</td><td class="${x.bal < 0 ? "bad" : ""}">${x.bal < 0 ? "Owing " + kes(-x.bal) : x.bal > 0 ? "Credit " + kes(x.bal) : "Nil"}</td><td class="t">${x.cl}${x.cv.length ? h`<div class="mu">also covers ${x.cv.join(", ")}</div>` : ""}</td></tr>`)}</tbody></table></div></div>
   ${pens.length ? h`<div class="card"><h2>Penalties added by the treasurer</h2><div class="tw"><table><tbody>${pens.map((p) => h`<tr><td class="t">${fdate(p.incurred_on)}</td><td>${kes(p.amount)}</td><td class="t">${p.status}</td><td class="t">${p.note || ""}</td><td>${t && p.status === "outstanding" ? h`<button class="btn sm ghost" data-act="penalty-waive" data-id="${p.id}">Waive</button>` : ""}</td></tr>`)}</tbody></table></div></div>` : ""}
-  <div class="card"><h2>Payment history</h2>${pays.length ? h`<div class="tw"><table><thead><tr><th>Date</th><th class="t">Type</th><th>Amount</th><th class="t">Reference</th></tr></thead><tbody>${pays.map((p) => h`<tr class="${p.status === "voided" ? "void" : ""}"><td>${fdate(p.paid_on)}</td><td class="t">${typeLabel(p)}${p.status === "voided" ? " (voided)" : ""}</td><td>${kes(p.amount)}</td><td class="t">${p.reference || ""}</td></tr>`)}</tbody></table></div>` : empty("No payments recorded yet.")}</div>`;
+  <div class="card"><h2>Payment history</h2>${pays.length ? h`<div class="tw"><table><thead><tr><th>Date</th><th class="t">Type</th><th>Amount</th><th class="t">Reference</th><th class="t">Recorded by</th></tr></thead><tbody>${pays.map((p) => h`<tr class="${p.status === "voided" ? "void" : ""}"><td>${fdate(p.paid_on)}</td><td class="t">${typeLabel(p)}${p.status === "voided" ? " (voided by " + (p.voided_by_name || "?") + ")" : ""}</td><td>${kes(p.amount)}</td><td class="t">${p.reference || ""}</td><td class="t">${p.created_by_name || ""}</td></tr>`)}</tbody></table></div>` : empty("No payments recorded yet.")}</div>`;
 }
 actions["stmt-open"] = (el) => openStatement(+el.dataset.id);
 actions["stmt-csv"] = (el) => downloadStatement(+el.dataset.id);
 forms["my-phone"] = async (d) => {
   await rpc("update_my_profile", { p_phone: d.phone });
   await done("Profile updated.");
+};
+forms["my-email"] = async (d) => {
+  const { error } = await sb.auth.updateUser({ email: d.email.trim().toLowerCase() }, { emailRedirectTo: location.origin + location.pathname });
+  if (error) throw error;
+  toast("Check your inbox. Open the confirmation link sent to the new address (and the old one, if asked) to finish.", "warn");
 };
 forms["my-pass"] = async (d) => {
   if (d.password !== d.password2) throw new Error("The passwords do not match.");
@@ -1009,6 +1028,7 @@ async function profile() {
   if (!m) return h`<div class="card">${empty("No member record is linked to this login.")}</div>`;
   return h`<div class="card"><h2>${m.name}</h2><p class="mu">Account number: <b>${m.id_number || "not set"}</b><br>Login email: <b>${m.email || state.session.user.email}</b><br>Member since: ${m.joined_on ? fdate(m.joined_on) : "the start"}</p>
     <form data-form="my-phone"><label>Phone<input name="phone" value="${m.phone || ""}" inputmode="tel"></label><p><button class="btn" type="submit">Save phone</button></p></form></div>
+  <div class="card"><h2>Change login email</h2><p class="mu">You sign in with <b>${state.session.user.email}</b>. Enter a new email and confirm it from your inbox.</p><form data-form="my-email"><label>New email<input name="email" type="email" required autocomplete="email"></label><p><button class="btn" type="submit">Change email</button></p></form></div>
   <div class="card"><h2>Change password</h2><form data-form="my-pass"><label>New password<input name="password" type="password" minlength="6" required autocomplete="new-password"></label><label>Confirm<input name="password2" type="password" minlength="6" required autocomplete="new-password"></label><p><button class="btn" type="submit">Change password</button></p></form></div>
   <div class="card"><button class="btn ghost" data-act="logout">${icon("out")} Sign out</button></div>`;
 }
@@ -1045,9 +1065,9 @@ async function contrib() {
   const m = me();
   return m ? contribSections(m) : h`<div class="card">${empty("No member record is linked to this login.")}</div>`;
 }
-function preview(m, kind, amount) {
+function preview(m, kind2, amount) {
   if (!m || !(amount > 0)) return "";
-  if (kind !== "dowry") return h`Recorded as ${PAY_TYPES.find((t) => t[0] === kind)[1].toLowerCase()}: ${kes(amount)}.`;
+  if (kind2 !== "dowry") return h`Recorded as ${PAY_TYPES.find((t) => t[0] === kind2)[1].toLowerCase()}: ${kes(amount)}.`;
   const c = core(), start = m.joined_on || "2023-01-01";
   let left = amount;
   const out = [];
@@ -1100,20 +1120,20 @@ function checkCsv(text) {
     if (!m) why.push("unknown member");
     const date = /^\d{4}-\d{2}$/.test(date0) ? date0 + "-01" : date0;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(new Date(date))) why.push("bad date (use YYYY-MM-DD)");
-    const kind = (type0 || "").toLowerCase();
-    if (!["savings", "dowry", "penalty", "other"].includes(kind)) why.push("type must be savings, dowry, penalty or other");
+    const kind2 = (type0 || "").toLowerCase();
+    if (!["savings", "dowry", "penalty", "other"].includes(kind2)) why.push("type must be savings, dowry, penalty or other");
     const amount = Number((amt || "").replace(/,/g, ""));
     if (!(amount > 0)) why.push("amount must be more than 0");
     const wave = (wave0 || "").toUpperCase();
-    if (kind === "dowry") {
+    if (kind2 === "dowry") {
       if (!/^W[12]-\d{4}$/.test(wave)) why.push("dowry needs a wave like W1-2024");
       else if (!c.periods.some((p) => `W${p.wave}-${p.year}` === wave)) why.push("no such wave");
     }
     if (why.length) return bad.push({ line, name, why: why.join(", ") });
-    const key = [m.id, kind, amount, date, kind === "dowry" ? wave : ""].join("|");
+    const key = [m.id, kind2, amount, date, kind2 === "dowry" ? wave : ""].join("|");
     if (seen.has(key)) return dup.push({ line, name, date, amount });
     seen.add(key);
-    valid.push({ member_id: m.id, kind, amount, paid_on: date, wave: kind === "dowry" ? wave : null, reference: ref || "", note: note || "Imported", name });
+    valid.push({ member_id: m.id, kind: kind2, amount, paid_on: date, wave: kind2 === "dowry" ? wave : null, reference: ref || "", note: note || "Imported", name });
   });
   return { valid, bad, dup };
 }
@@ -1165,7 +1185,7 @@ async function payScreen(arg) {
   const s = (state.f.q || "").toLowerCase();
   const rows = c.payments.filter((p) => inPeriod(p.paid_on) && ftype(p) && (!s || memberName(p.member_id).toLowerCase().includes(s))).sort((a, b) => a.paid_on < b.paid_on ? 1 : a.paid_on > b.paid_on ? -1 : b.id - a.id).slice(0, 300);
   return h`${tabs}${filterBar({ types: PAY_TYPES, search: true })}<div class="card"><p class="mu">${rows.length} payment${rows.length === 1 ? "" : "s"}${rows.length === 300 ? " (latest 300 shown)" : ""} \u00b7 total ${kes(sum(rows.filter((p) => p.status === "posted"), (p) => p.amount))}</p>
-    ${rows.length ? h`<div class="tw"><table><thead><tr><th>Date</th><th class="t">Member</th><th class="t">Type</th><th>Amount</th><th class="t">Reference</th><th></th></tr></thead><tbody>${rows.map((p) => h`<tr class="${p.status === "voided" ? "void" : ""}"><td>${fdate(p.paid_on)}</td><td class="t">${memberName(p.member_id)}</td><td class="t">${typeLabel(p)}</td><td>${kes(p.amount)}</td><td class="t">${p.reference || ""}${p.status === "voided" ? h` <span class="mu">(voided: ${p.void_reason || ""})</span>` : ""}</td><td>${p.status === "posted" ? h`<button class="btn sm ghost" data-act="pay-void" data-id="${p.id}">Void</button>` : ""}</td></tr>`)}</tbody></table></div>` : empty("No payments match.")}</div>`;
+    ${rows.length ? h`<div class="tw"><table><thead><tr><th>Date</th><th class="t">Member</th><th class="t">Type</th><th>Amount</th><th class="t">Reference</th><th class="t">Recorded by</th><th></th></tr></thead><tbody>${rows.map((p) => h`<tr class="${p.status === "voided" ? "void" : ""}"><td>${fdate(p.paid_on)}</td><td class="t">${memberName(p.member_id)}</td><td class="t">${typeLabel(p)}</td><td>${kes(p.amount)}</td><td class="t">${p.reference || ""}</td><td class="t">${p.created_by_name || ""}${p.status === "voided" ? h` <span class="mu">(voided by ${p.voided_by_name || "?"}: ${p.void_reason || ""})</span>` : ""}</td><td>${p.status === "posted" ? h`<button class="btn sm ghost" data-act="pay-void" data-id="${p.id}">Void</button>` : ""}</td></tr>`)}</tbody></table></div>` : empty("No payments match.")}</div>`;
 }
 var routes5 = {
   contrib: { title: "My Contributions", need: "member", view: contrib },
@@ -1183,8 +1203,8 @@ var KINDS = [["opening", "Opening balance"], ["other_income", "Other income"], [
 var ENTRY_TYPES = [["other_income", "Other income"], ["interest", "Fixed deposit interest"], ["expense", "Expense"], ["deposit_placed", "Fixed deposit placed"], ["deposit_returned", "Fixed deposit returned"], ["opening", "Opening balance"]];
 var label = (k) => (KINDS.find((x) => x[0] === k) || [0, k])[1];
 forms["fin-entry"] = async (d) => {
-  const kind = d.type === "interest" ? "other_income" : d.type, category = d.type === "interest" ? "Fixed deposit interest" : d.category || null;
-  await rpc("record_ledger_entry", { p_kind: kind, p_date: d.date, p_amount: +d.amount, p_category: category, p_description: d.description || null, p_reference: d.reference || null });
+  const kind2 = d.type === "interest" ? "other_income" : d.type, category = d.type === "interest" ? "Fixed deposit interest" : d.category || null;
+  await rpc("record_ledger_entry", { p_kind: kind2, p_date: d.date, p_amount: +d.amount, p_category: category, p_description: d.description || null, p_reference: d.reference || null });
   toast("Entry recorded successfully.");
   await hooks.refresh();
 };
@@ -1220,7 +1240,7 @@ async function view() {
     <div class="row"><label>Category (e.g. Transport, Meeting)<input name="category"></label><label>Description<input name="description"></label><label>Reference<input name="reference"></label></div><p><button class="btn" type="submit">Save entry</button></p></form></div>
   <div class="card"><h2>Dowry payout</h2><form data-form="fin-payout"><div class="row"><label>Member<select name="member">${active.map((m) => h`<option value="${m.id}">${m.name}${m.benefited ? " (already benefited)" : ""}</option>`)}</select></label><label>Amount<input type="number" name="amount" value="${c.S.payout_amount}" min="1" required></label><label>Date<input type="date" name="date" value="${today()}" required></label></div><p><button class="btn" type="submit">Record payout</button></p></form></div>
   ${pending.length ? h`<div class="card"><h2>Refunds to pay</h2><div class="tw"><table><tbody>${pending.map((m) => h`<tr><td class="t"><a href="#/member/${m.id}">${m.name}</a><div class="mu">Left ${fdate(m.left_on)}</div></td><td>${m.refund_amount ? kes(m.refund_amount) : "set amount"}</td><td><button class="btn sm" data-act="member-refund" data-id="${m.id}">Record refund</button></td></tr>`)}</tbody></table></div></div>` : ""}
-  <div class="card"><h2>Entries</h2>${list2.length ? h`<div class="tw"><table><thead><tr><th>Date</th><th class="t">Type</th><th class="t">Details</th><th>Amount</th><th></th></tr></thead><tbody>${list2.map((x) => h`<tr class="${x.status === "voided" ? "void" : ""}"><td>${fdate(x.entry_date)}</td><td class="t">${label(x.kind)}</td><td class="t">${[x.category, x.description, x.member_id ? memberName(x.member_id) : ""].filter(Boolean).join(" \xB7 ")}${x.status === "voided" ? h` <span class="mu">(voided: ${x.void_reason})</span>` : ""}</td><td>${kes(x.amount)}</td><td>${x.status === "posted" ? h`<button class="btn sm ghost" data-act="fin-void" data-id="${x.id}">Void</button>` : ""}</td></tr>`)}</tbody></table></div>` : empty("No entries in this selection.")}</div>`;
+  <div class="card"><h2>Entries</h2>${list2.length ? h`<div class="tw"><table><thead><tr><th>Date</th><th class="t">Type</th><th class="t">Details</th><th class="t">Recorded by</th><th>Amount</th><th></th></tr></thead><tbody>${list2.map((x) => h`<tr class="${x.status === "voided" ? "void" : ""}"><td>${fdate(x.entry_date)}</td><td class="t">${label(x.kind)}</td><td class="t">${[x.category, x.description, x.member_id ? memberName(x.member_id) : ""].filter(Boolean).join(" \xB7 ")}${x.status === "voided" ? h` <span class="mu">(voided by ${x.voided_by_name || "?"}: ${x.void_reason})</span>` : ""}</td><td class="t">${x.created_by_name || ""}</td><td>${kes(x.amount)}</td><td>${x.status === "posted" ? h`<button class="btn sm ghost" data-act="fin-void" data-id="${x.id}">Void</button>` : ""}</td></tr>`)}</tbody></table></div>` : empty("No entries in this selection.")}</div>`;
 }
 var routes6 = { finance: { title: "Finance", sub: "Group money", need: "treasurer", view } };
 
@@ -1393,6 +1413,18 @@ actions["set-year"] = async (el) => {
     await done2(`Periods for ${y} added.`);
   });
 };
+actions["role-set"] = async (el) => {
+  const o = await ask({ title: "Remove role", message: `Remove the ${el.dataset.role} role from ${el.dataset.email}? They become a normal member with no extra access.`, ok: "Remove role", danger: true });
+  if (!o) return;
+  await busy(el, async () => {
+    await rpc("set_user_role", { p_email: el.dataset.email, p_role: "member" });
+    await done2("Role removed.");
+  });
+};
+changes.aq = (el) => {
+  state.f.aq = el.value;
+  hooks.route();
+};
 changes.atable = (el) => {
   state.f.atable = el.value;
   hooks.route();
@@ -1404,22 +1436,87 @@ async function view2() {
     return m ? m.name : u ? "User " + String(u).slice(0, 6) : "System";
   };
   const tables = [...new Set(audit.map((a) => a.table_name).filter(Boolean))].sort(), at = state.f.atable || "all";
-  const log = audit.filter((a) => at === "all" || a.table_name === at).slice(0, 100);
+  const aq = (state.f.aq || "").toLowerCase();
+  const log = audit.filter((a) => (at === "all" || a.table_name === at) && (!aq || [a.actor, a.actor_email, a.action, a.reason].some((x) => (x || "").toLowerCase().includes(aq)))).slice(0, 100);
   return h`<div class="card"><h2>Officers</h2><form data-form="set-officers"><div class="row">${off.map((o) => h`<label>${o.position}<input data-pos="${o.position}" data-sort="${o.sort}" value="${o.holder || ""}" placeholder="Vacant"></label>`)}</div><p><button class="btn" type="submit">Save officers</button></p></form></div>
   <div class="card"><h2>Contributions</h2><form data-form="set-config"><div class="row"><label>Monthly savings (KES)<input type="number" name="monthly_savings" value="${S.monthly_savings}" min="0"></label><label>Monthly dowry (KES)<input type="number" name="monthly_dowry" value="${S.monthly_dowry}" min="0"></label><label>Standard dowry payout (KES)<input type="number" name="payout_amount" value="${S.payout_amount}" min="0"></label></div>
     <div class="row"><label>Monthly dues counted from (YYYY-MM)<input name="savings_start" value="${S.savings_start}" pattern="\\d{4}-\\d{2}" required></label><label>Group email<input type="email" name="group_email" value="${S.group_email || ""}"></label></div><p><button class="btn" type="submit">Save settings</button></p></form></div>
   <div class="card"><h2>Penalty amounts</h2><form data-form="set-penalties"><div class="row">${c.ptypes.map((t) => h`<label>${t.name}<input type="number" data-pt="${t.id}" value="${t.amount}" min="0"></label>`)}</div><p><button class="btn" type="submit">Save penalty amounts</button></p></form></div>
   <div class="card"><h2>Dowry periods</h2><div class="tw"><table><thead><tr><th>Period</th><th>Starts</th><th>Due</th><th>Target</th></tr></thead><tbody>${c.periods.map((p) => h`<tr><td>Wave ${p.wave} ${p.year}</td><td>${fdate(p.start_date)}</td><td>${fdate(p.due_date)}</td><td>${kes(p.target)}</td></tr>`)}</tbody></table></div><p><button class="btn ghost" data-act="set-year">Add next year</button></p></div>
   <div class="card"><h2>Roles</h2><p class="mu">Administrator: everything. Treasurer: payments and finance. Secretary: attendance and messages. The person must create an account first.</p>
-    ${roles.length ? h`<div class="list">${roles.map((r) => h`<div class="it"><span>${r.email}</span>${badge(r.role, r.role === "admin" ? "gold" : "")}</div>`)}</div>` : ""}
+    ${roles.length ? h`<div class="list">${roles.map((r) => h`<div class="it"><span>${r.email}</span><span>${badge(r.role, r.role === "admin" ? "gold" : "")} ${r.email.toLowerCase() === state.session.user.email.toLowerCase() ? "" : h`<button class="btn sm ghost" data-act="role-set" data-email="${r.email}" data-role="${r.role}">Remove</button>`}</span></div>`)}</div>` : ""}
     <form data-form="set-role"><div class="row"><label>Email<input type="email" name="email" required></label><label>Role<select name="role"><option value="treasurer">Treasurer</option><option value="secretary">Secretary</option><option value="admin">Administrator</option><option value="member">Member (no extra access)</option></select></label><button class="btn" type="submit">Save role</button></div></form></div>
-  <div class="card"><h2>Audit log</h2><div class="fbar"><select data-chg="atable"><option value="all">All tables</option>${tables.map((t) => h`<option ${at === t ? "selected" : ""}>${t}</option>`)}</select></div>
-    ${log.length ? h`<div class="tw"><table><thead><tr><th>When</th><th class="t">Who</th><th class="t">Action</th><th class="t">Table</th><th class="t">Record</th><th class="t">Reason</th></tr></thead><tbody>${log.map((a) => h`<tr><td>${new Date(a.created_at).toLocaleString("en-GB")}</td><td class="t">${who(a.user_id)}</td><td class="t">${a.action}</td><td class="t">${a.table_name || ""}</td><td class="t">${a.record_id || ""}</td><td class="t">${a.reason || ""}</td></tr>`)}</tbody></table></div>` : empty("No activity recorded yet.")}</div>`;
+  <div class="card"><h2>Audit log</h2><div class="fbar"><input id="aqsearch" data-inp="aq" placeholder="Search by person, action or reason" value="${state.f.aq || ""}"><select data-chg="atable"><option value="all">All tables</option>${tables.map((t) => h`<option ${at === t ? "selected" : ""}>${t}</option>`)}</select></div>
+    ${log.length ? h`<div class="tw"><table><thead><tr><th>When</th><th class="t">Who made the change</th><th class="t">Action</th><th class="t">Table</th><th class="t">Record</th><th class="t">Reason</th></tr></thead><tbody>${log.map((a) => h`<tr><td>${new Date(a.created_at).toLocaleString("en-GB")}</td><td class="t">${a.actor || who(a.user_id)}${a.actor_email && a.actor_email !== a.actor ? h`<div class="mu">${a.actor_email}</div>` : ""}</td><td class="t">${a.action}</td><td class="t">${a.table_name || ""}</td><td class="t">${a.record_id || ""}</td><td class="t">${a.reason || ""}</td></tr>`)}</tbody></table></div>` : empty("No activity recorded yet.")}</div>`;
 }
 var routes9 = { settings: { title: "Settings", sub: "Administrator only", need: "admin", view: view2 } };
 
+// ../../mnt/user-data/outputs/real-brothers/js/minutes.js
+var minutes_exports = {};
+__export(minutes_exports, {
+  routes: () => routes10
+});
+init_utils();
+init_state();
+var MAX = 10 * 1024 * 1024;
+var size = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+var kind = (m) => /^image\//.test(m.mime_type || "") ? "Picture" : /pdf/.test(m.mime_type || "") ? "PDF" : /word|officedocument|msword/.test(m.mime_type || "") ? "Word" : /sheet|excel/.test(m.mime_type || "") ? "Excel" : /^text\//.test(m.mime_type || "") ? "Text" : "File";
+forms["min-up"] = async (d, form) => {
+  const f = form.querySelector('input[type="file"]').files[0];
+  if (!f) throw new Error("Choose a file to upload.");
+  if (f.size > MAX) throw new Error("That file is larger than 10 MB. Please choose a smaller one.");
+  const now = /* @__PURE__ */ new Date(), safe = f.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
+  const path = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${crypto.randomUUID()}_${safe}`;
+  const up = await sb.storage.from("minutes").upload(path, f, { contentType: f.type || "application/octet-stream", upsert: false });
+  if (up.error) throw up.error;
+  await rpc("add_minutes", { p_date: d.date || null, p_title: d.title, p_notes: d.notes || null, p_path: path, p_name: f.name, p_mime: f.type || "application/octet-stream", p_size: f.size });
+  toast("Minutes uploaded successfully.");
+  await hooks.refresh();
+};
+actions["min-open"] = async (el) => {
+  const w = window.open("", "_blank");
+  const { data, error } = await sb.storage.from("minutes").createSignedUrl(el.dataset.path, 120);
+  if (error) {
+    if (w) w.close();
+    throw error;
+  }
+  if (w) w.location = data.signedUrl;
+  else location.href = data.signedUrl;
+};
+actions["min-dl"] = async (el) => {
+  const { data, error } = await sb.storage.from("minutes").createSignedUrl(el.dataset.path, 120, { download: el.dataset.name });
+  if (error) throw error;
+  const a = document.createElement("a");
+  a.href = data.signedUrl;
+  a.download = el.dataset.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
+actions["min-remove"] = async (el) => {
+  const o = await ask({ title: "Remove these minutes", message: "They are hidden from members but kept for the committee, with your reason.", reason: true, ok: "Remove", danger: true });
+  if (!o) return;
+  await busy(el, async () => {
+    await rpc("remove_minutes", { p_id: +el.dataset.id, p_reason: o.reason });
+    toast("Minutes removed.");
+    await hooks.refresh();
+  }, "Removing...");
+};
+async function view3() {
+  const rows = await q(sb.from("minutes").select("*").order("meeting_date", { ascending: false, nullsFirst: false }).order("id", { ascending: false }));
+  const up = state.role.secretary;
+  return h`${up ? h`<div class="card"><h2>Upload minutes</h2><form data-form="min-up"><div class="row"><label>Meeting date<input type="date" name="date" value="${today()}"></label><label>Title<input name="title" required maxlength="140" placeholder="e.g. October 2026 monthly meeting"></label></div>
+    <label>Notes (optional)<input name="notes" maxlength="300" placeholder="Short summary"></label><label>File: a picture, PDF, Word document or any other format (up to 10 MB)<input type="file" name="file" required></label>
+    <div class="sticky-act"><button class="btn" type="submit">${icon("plus")} Upload</button></div></form></div>` : ""}
+  ${rows.length ? rows.map((m) => h`<div class="card" ${m.status === "removed" ? h`style="opacity:.6"` : ""}><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h2>${m.title} ${m.status === "removed" ? badge("Removed", "bad") : ""}</h2>
+    <p class="mu">${m.meeting_date ? "Meeting of " + fdate(m.meeting_date) + " \xB7 " : ""}uploaded ${fdate(m.created_at)} by ${m.uploaded_by_name || "the committee"}</p>${m.notes ? h`<p>${m.notes}</p>` : ""}
+    <p class="mu">${icon("file")} ${m.file_name} \u00b7 ${badge(kind(m))} ${m.size_bytes ? size(m.size_bytes) : ""}</p>${m.status === "removed" ? h`<p class="mu">Removed by ${m.removed_by_name}: ${m.removed_reason}</p>` : ""}</div>
+    <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap"><button class="btn sm" data-act="min-open" data-path="${m.file_path}">${icon("eye")} View</button><button class="btn sm ghost" data-act="min-dl" data-path="${m.file_path}" data-name="${m.file_name}">${icon("down")} Download</button>${up && m.status === "active" ? h`<button class="btn sm ghost" data-act="min-remove" data-id="${m.id}">Remove</button>` : ""}</div></div></div>`) : h`<div class="card">${empty("No minutes uploaded yet.", up ? "Use the form above to upload the first one." : "Minutes will appear here after each meeting.")}</div>`}`;
+}
+var routes10 = { minutes: { title: "Minutes", sub: "Meeting records", need: null, view: view3 } };
+
 // ../../mnt/user-data/outputs/real-brothers/js/app.js
-var ROUTES = Object.assign({}, ...[dashboard_exports, members_exports, payments_exports, finance_exports, attendance_exports, messages_exports, voting_exports, reports_exports, settings_exports].map((m) => m.routes));
+var ROUTES = Object.assign({}, ...[dashboard_exports, members_exports, payments_exports, finance_exports, attendance_exports, messages_exports, voting_exports, reports_exports, settings_exports, minutes_exports].map((m) => m.routes));
 var can = (need) => !need || (need === "member" ? !!state.meId : need === "staff" ? state.role.staff : !!state.role[need]);
 var STAFF_NAV = [
   ["dash", "Dashboard", "dash", "staff"],
@@ -1429,16 +1526,17 @@ var STAFF_NAV = [
   ["att", "Attendance", "cal", "secretary"],
   ["msg", "Messages", "mail", "secretary"],
   ["vote", "Voting", "vote", "staff"],
+  ["minutes", "Minutes", "file", "staff"],
   ["reports", "Reports", "chart", "staff"],
   ["settings", "Settings", "gear", "admin"]
 ];
-var MY_NAV = [["home", "My Home", "home", "member"], ["contrib", "My Contributions", "wallet", "member"], ["statement", "My Statement", "file", "member"], ["inbox", "My Messages", "mail", "member"], ["myatt", "My Attendance", "cal", "member"], ["myvote", "My Votes", "vote", "member"], ["profile", "My Profile", "user", "member"]];
+var MY_NAV = [["home", "My Home", "home", "member"], ["contrib", "My Contributions", "wallet", "member"], ["statement", "My Statement", "file", "member"], ["inbox", "My Messages", "mail", "member"], ["minutes", "Minutes", "file", "member"], ["myatt", "My Attendance", "cal", "member"], ["myvote", "My Votes", "vote", "member"], ["profile", "My Profile", "user", "member"]];
 var MEMBER_BOTTOM = [["home", "Home", "home"], ["contrib", "Contributions", "wallet"], ["statement", "Statement", "file"], ["inbox", "Messages", "mail"], ["more", "More", "more"]];
 var link = (n, label2, ic, cls = "nav") => h`<a class="${cls}" href="#/${n}" data-r="${n}">${icon(ic)}<span>${label2}</span></a>`;
 function shell() {
   const staff = state.role.staff, m = me();
   const items = (arr) => arr.filter((x) => can(x[3])).map((x) => link(x[0], x[1], x[2]));
-  const side = staff ? h`${items(STAFF_NAV)}${state.meId ? h`<div class="grp">My account</div>${items(MY_NAV)}` : ""}` : items(MY_NAV);
+  const side = staff ? h`${items(STAFF_NAV)}${state.meId ? h`<div class="grp">My account</div>${items(MY_NAV.filter((x) => x[0] !== "minutes"))}` : ""}` : items(MY_NAV);
   const bottomItems = staff ? STAFF_NAV.filter((x) => can(x[3])).slice(0, 4).map((x) => [x[0], x[1], x[2]]).concat([["more", "More", "more"]]) : MEMBER_BOTTOM;
   const role = state.role.admin ? "Administrator" : state.role.treasurer ? "Treasurer" : state.role.secretary ? "Secretary" : "Member";
   root().innerHTML = str(h`<div class="app"><aside class="side"><div class="brand"><img src="${LOGO}" alt=""><div><b>REAL BROTHERS 022</b><small>Dowry Support &amp; Mutual Aid</small></div></div>${side}
@@ -1460,21 +1558,21 @@ async function route() {
     location.replace("#/" + home());
     return;
   }
-  const tok = ++token, view3 = $("#view");
-  if (!view3) return;
+  const tok = ++token, view4 = $("#view");
+  if (!view4) return;
   $$("[data-r]").forEach((a) => a.classList.toggle("on", a.dataset.r === r.name || r.name === "member" && a.dataset.r === "members"));
   $("#ttl").textContent = def.title;
   $("#sub").textContent = def.sub || "";
   document.title = def.title + " | Real Brothers 022";
   const ae = document.activeElement, fid = ae && ae.id, fpos = ae && ae.selectionStart;
-  if (!view3.dataset.ready) {
-    view3.innerHTML = str(skeleton(4));
+  if (!view4.dataset.ready) {
+    view4.innerHTML = str(skeleton(4));
   }
   try {
     const out = await def.view(r.arg);
     if (tok !== token) return;
-    view3.innerHTML = str(out);
-    view3.dataset.ready = "1";
+    view4.innerHTML = str(out);
+    view4.dataset.ready = "1";
     if (def.after) def.after(r.arg);
     if (fid) {
       const n = document.getElementById(fid);
@@ -1489,7 +1587,7 @@ async function route() {
   } catch (e) {
     console.error(e);
     if (tok !== token) return;
-    view3.innerHTML = str(h`<div class="card"><p class="bad"><b>This page could not load.</b></p><p class="mu">${errMsg(e)}</p><button class="btn" data-act="retry">Try again</button></div>`);
+    view4.innerHTML = str(h`<div class="card"><p class="bad"><b>This page could not load.</b></p><p class="mu">${errMsg(e)}</p><button class="btn" data-act="retry">Try again</button></div>`);
   }
 }
 window.addEventListener("hashchange", () => {
@@ -1511,7 +1609,7 @@ hooks.mount = () => {
 actions.retry = () => hooks.refresh();
 actions.more = () => {
 };
-ROUTES.more = { title: "More", need: "member", view: async () => h`<div class="card"><div class="list">${[["myatt", "Attendance", "cal"], ["myvote", "Voting", "vote"], ["profile", "My Profile", "user"]].concat(state.role.staff ? [["reports", "Reports", "chart"], ["settings", "Settings", "gear"], ["att", "Record attendance", "cal"], ["msg", "Send messages", "mail"], ["vote", "Voting admin", "vote"]].filter((x) => can(x[0] === "settings" ? "admin" : x[0] === "att" || x[0] === "msg" ? "secretary" : "staff")) : []).map((x) => h`<a class="it" href="#/${x[0]}" style="text-decoration:none;color:inherit"><span>${icon(x[2])} &nbsp;${x[1]}</span><span>&rsaquo;</span></a>`)}<a class="it" href="#" data-act="logout" style="text-decoration:none;color:var(--bad)"><span>${icon("out")} &nbsp;Sign out</span></a></div></div>` };
+ROUTES.more = { title: "More", need: "member", view: async () => h`<div class="card"><div class="list">${[["minutes", "Minutes", "file"], ["myatt", "Attendance", "cal"], ["myvote", "Voting", "vote"], ["profile", "My Profile", "user"]].concat(state.role.staff ? [["reports", "Reports", "chart"], ["settings", "Settings", "gear"], ["att", "Record attendance", "cal"], ["msg", "Send messages", "mail"], ["vote", "Voting admin", "vote"]].filter((x) => can(x[0] === "settings" ? "admin" : x[0] === "att" || x[0] === "msg" ? "secretary" : "staff")) : []).map((x) => h`<a class="it" href="#/${x[0]}" style="text-decoration:none;color:inherit"><span>${icon(x[2])} &nbsp;${x[1]}</span><span>&rsaquo;</span></a>`)}<a class="it" href="#" data-act="logout" style="text-decoration:none;color:var(--bad)"><span>${icon("out")} &nbsp;Sign out</span></a></div></div>` };
 ROUTES.more.need = null;
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-act]");
