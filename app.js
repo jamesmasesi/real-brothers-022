@@ -339,7 +339,7 @@ async function loadCore() {
     all("meeting_attendance", "meeting_id"),
     q(sb.from("penalties").select("*"))
   ]);
-  const S = { monthly_savings: 200, monthly_dowry: 1250, savings_start: "2025-12", payout_amount: 12e4, group_email: "" };
+  const S = { monthly_savings: 200, monthly_dowry: 1250, savings_start: "2025-12", payout_amount: 12e4, group_email: "", att_good: 80, att_fair: 60 };
   settings.forEach((r) => S[r.key] = r.value);
   const T = { ABSENT: 200, LATE: 50, SPECIAL_ABSENT: 1e3, UNPAID_MEETING: 100 };
   ptypes.forEach((t) => T[t.code] = Number(t.amount));
@@ -442,7 +442,7 @@ async function startAuth() {
 // ../../mnt/user-data/outputs/real-brothers/js/dashboard.js
 var dashboard_exports = {};
 __export(dashboard_exports, {
-  routes: () => routes,
+  routes: () => routes2,
   typeLabel: () => typeLabel
 });
 init_utils();
@@ -556,6 +556,75 @@ var inPeriod = (d, f = state.f) => {
   return (f.year === "all" || s.slice(0, 4) === f.year) && (f.month === "all" || s.slice(5, 7) === f.month);
 };
 
+// ../../mnt/user-data/outputs/real-brothers/js/attendance.js
+var attendance_exports = {};
+__export(attendance_exports, {
+  attRating: () => attRating,
+  attStats: () => attStats,
+  routes: () => routes
+});
+init_utils();
+init_state();
+var STATUS = [["present", "Present"], ["absent", "Absent"], ["late", "Late"], ["excused", "Excused"]];
+changes.mdate = (el) => {
+  state.f.mdate = el.value;
+  hooks.route();
+};
+forms["att-save"] = async (d, form) => {
+  const entries = [...form.querySelectorAll("select[data-mid]")].map((s) => ({ member_id: +s.dataset.mid, status: s.value }));
+  const n = await rpc("record_attendance", { p_date: d.date, p_entries: entries, p_notes: d.notes || null });
+  toast(`Attendance saved for ${n} members.`);
+  await hooks.refresh();
+};
+actions["att-all"] = (el) => {
+  document.querySelectorAll("select[data-mid]").forEach((s) => s.value = el.dataset.v);
+};
+function attStats(mid, all2 = false) {
+  const c = core(), rows = c.att.filter((a) => a.member_id === mid).map((a) => ({ a, mt: c.meetingById[a.meeting_id] })).filter((x) => x.mt && (all2 || inPeriod(x.mt.meeting_date)));
+  const n = (s) => rows.filter((x) => x.a.status === s).length, total = rows.length, den = total - n("excused");
+  const byDate = rows.slice().sort((a, b) => a.mt.meeting_date < b.mt.meeting_date ? -1 : 1);
+  let streak = 0;
+  for (let i = byDate.length - 1; i >= 0 && byDate[i].a.status === "absent"; i--) streak++;
+  return { rows, total, present: n("present"), absent: n("absent"), late: n("late"), excused: n("excused"), streak, rate: den > 0 ? pct(n("present") + n("late"), den) : 0 };
+}
+function attRating(s) {
+  const S = core().S, good = Number(S.att_good) || 80, fair = Number(S.att_fair) || 60;
+  if (s.total < 3) return { label: "Not enough records", kind: "", note: "Needs at least 3 recorded meetings" };
+  if (s.streak >= 3) return { label: "Poor", kind: "bad", note: `Absent ${s.streak} meetings in a row` };
+  if (s.rate >= good) return { label: "Good", kind: "ok", note: `${s.rate}% attendance` };
+  if (s.rate >= fair) return { label: "Fair", kind: "warn", note: `${s.rate}% attendance` };
+  return { label: "Poor", kind: "bad", note: `${s.rate}% attendance` };
+}
+async function record() {
+  const c = core(), date = state.f.mdate || today(), active = c.members.filter((m) => m.status === "active");
+  const mt = c.meetings.find((x) => x.meeting_date === date), cur = {};
+  if (mt) c.att.filter((a) => a.meeting_id === mt.id).forEach((a) => cur[a.member_id] = a.status);
+  const stats = active.map((m) => ({ m, s: attStats(m.id) }));
+  return h`<div class="card"><h2>Record a meeting</h2><form data-form="att-save"><div class="row"><label>Meeting date<input type="date" name="date" value="${date}" data-chg="mdate" required></label><label>Notes (optional)<input name="notes" value="${mt && mt.notes && !/Migrated/.test(mt.notes) ? mt.notes : ""}"></label></div>
+    ${mt ? h`<p class="mu">A record already exists for this date. Saving updates it.</p>` : ""}
+    <div class="row" style="margin:10px 0">${STATUS.map((s) => h`<button type="button" class="btn sm ghost" data-act="att-all" data-v="${s[0]}">All ${s[1].toLowerCase()}</button>`)}</div>
+    <div class="tw"><table><tbody>${active.map((m) => h`<tr><td class="t">${m.name}</td><td><select data-mid="${m.id}" aria-label="Status for ${m.name}">${STATUS.map((s) => h`<option value="${s[0]}" ${(cur[m.id] || "present") === s[0] ? "selected" : ""}>${s[1]}</option>`)}</select></td></tr>`)}</tbody></table></div>
+    <div class="sticky-act"><button class="btn" type="submit">Save attendance</button></div></form>
+    <p class="mu">Absent adds KES ${c.T.ABSENT} and late adds KES ${c.T.LATE} to what the member owes for that month. Excused adds nothing.</p></div>
+  ${filterBar()}<div class="card"><h2>Attendance summary</h2><div class="tw"><table><thead><tr><th>Member</th><th>Meetings</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th><th>Attendance</th><th class="t">Rating</th></tr></thead><tbody>${stats.map(({ m, s }) => {
+    const r = attRating(s);
+    return h`<tr><td>${m.name}</td><td>${s.total}</td><td>${s.present}</td><td>${s.absent}</td><td>${s.late}</td><td>${s.excused}</td><td>${s.total ? s.rate + "%" : "-"}</td><td class="t">${badge(r.label, r.kind)}<div class="mu">${s.streak >= 3 ? r.note : ""}</div></td></tr>`;
+  })}</tbody></table></div></div>`;
+}
+async function mine() {
+  const m = me();
+  if (!m) return h`<div class="card">${empty("No member record is linked to this login.")}</div>`;
+  const s = attStats(m.id);
+  const r = attRating(attStats(m.id, true));
+  return h`<div class="card hero" style="${r.kind === "bad" ? "background:linear-gradient(135deg,#7a2219,#b3392f)" : r.kind === "warn" ? "background:linear-gradient(135deg,#8a5a0c,#b77a14)" : ""}"><div class="mu">YOUR ATTENDANCE RECORD</div><div style="font-size:30px;font-weight:700">${r.label}</div><div>${r.note}</div>
+    <div class="mu" style="margin-top:6px">Good is ${core().S.att_good || 80}% or more. Fair is ${core().S.att_fair || 60}% or more. Missing 3 meetings in a row counts as Poor.</div></div>${filterBar()}<div class="grid"><div class="kpi"><small>Meetings</small><b>${s.total}</b></div><div class="kpi green"><small>Present</small><b>${s.present}</b></div><div class="kpi red"><small>Absent</small><b>${s.absent}</b></div><div class="kpi"><small>Late</small><b>${s.late}</b></div><div class="kpi gold"><small>Attendance</small><b>${s.total ? s.rate + "%" : "-"}</b></div></div>
+  <div class="card"><h2>My meetings</h2>${s.rows.length ? h`<div class="tw"><table><tbody>${s.rows.sort((a, b) => a.mt.meeting_date < b.mt.meeting_date ? 1 : -1).map((x) => h`<tr><td class="t">${fdate(x.mt.meeting_date)}</td><td class="t">${badge(STATUS.find((t) => t[0] === x.a.status)[1], x.a.status === "present" ? "ok" : x.a.status === "absent" ? "bad" : "warn")}</td></tr>`)}</tbody></table></div>` : empty("No attendance records yet.")}</div>`;
+}
+var routes = {
+  att: { title: "Attendance", sub: "Record who attended", need: "secretary", view: record },
+  myatt: { title: "My Attendance", need: "member", view: mine }
+};
+
 // ../../mnt/user-data/outputs/real-brothers/js/dashboard.js
 var typeLabel = (p) => p.kind === "savings" ? "Monthly Savings" : p.kind === "dowry" ? "Dowry Contribution" + (p.wave ? " (" + p.wave + ")" : "") : p.kind === "penalty" ? "Penalty payment" : "Other contribution";
 var recent = (rows, withName) => rows.length ? h`<div class="list">${rows.map((p) => h`<div class="it"><div><b>${typeLabel(p)}</b><div class="mu">${fdate(p.paid_on)}${withName ? " \xB7 " + memberName(p.member_id) : ""}</div></div><b class="ok">+ ${kes(p.amount)}</b></div>`)}</div>` : empty("No payments recorded yet.");
@@ -581,6 +650,10 @@ async function memberHome() {
     <div class="kpi green"><small>My savings</small><b>${kes(s.savingsPaid)}</b></div>
     <div class="kpi gold"><small>Dowry contribution ${(/* @__PURE__ */ new Date()).getFullYear()}</small><b>${kes(s.yearPaid)} / ${kes(s.yearTarget)}</b>${bar(yp)}<div class="sub">${yp}% complete</div></div>
     <div class="kpi ${s.owing > 0 ? "red" : "green"}"><small>Total owing</small><b class="${s.owing > 0 ? "bad" : "ok"}">${kes(s.owing)}</b><div class="sub">${s.owing > 0 ? "Savings and fines " + kes(s.sp.owing) + ", dowry overdue " + kes(s.pos.overdue) : "You are up to date"}</div></div>
+    ${(() => {
+    const r = attRating(attStats(m.id, true));
+    return h`<div class="kpi ${r.kind === "bad" ? "red" : r.kind === "ok" ? "green" : ""}"><small>Attendance</small><b>${r.label}</b><div class="sub">${r.note}</div></div>`;
+  })()}
     <div class="kpi"><small>Next contribution</small><b>${kes(s.sp.next)}</b><div class="sub">${kes(c.S.monthly_savings)} savings + ${kes(c.S.monthly_dowry)} dowry${s.pos.next_due ? " \xB7 wave due " + fdate(s.pos.next_due) : ""}</div></div>
   </div>
   <div class="card"><h2>Quick actions</h2><div class="quick">
@@ -606,6 +679,7 @@ async function staffHome() {
   const prog = rows.map((r) => ({ l: r.m.name, v: r.yearPaid, max: r.yearTarget || 15e3, c: r.status === "Complete" || r.status === "On Track" ? "var(--green2)" : r.status === "Behind" ? "var(--warn)" : "var(--bad)" }));
   const lastMt = c.meetings.slice().sort((a, b) => a.meeting_date < b.meeting_date ? 1 : -1)[0];
   const ac = lastMt ? c.att.filter((a) => a.meeting_id === lastMt.id) : [];
+  const att = active.map((m) => ({ m, s: attStats(m.id, true) })).map((x) => ({ ...x, r: attRating(x.s) })), poorAtt = att.filter((x) => x.r.kind === "bad");
   const noOpening = t && !ledger.some((x) => x.kind === "opening" && x.status === "posted");
   return h`
   ${noOpening ? h`<div class="alert"><b>Group balance is not reliable yet.</b> Record an <a href="#/finance">Opening balance</a> (the group's total money on the day your records start, for example 1 January 2025). Until then the balance counts every payment since 2023 and nothing that was spent.</div>` : ""}
@@ -623,9 +697,10 @@ async function staffHome() {
   ${owe.length ? h`<div class="card"><h2>Largest outstanding balances</h2>${hbars(owe, 1)}</div>` : ""}
   <div class="card"><h2>Recent payments</h2>${recent(latest(c.posted).slice(0, 8), true)}</div>
   ${t ? h`<div class="card"><h2>Recent finance transactions</h2>${ledger.length ? h`<div class="list">${ledger.slice().sort((a, b) => a.entry_date < b.entry_date ? 1 : -1).slice(0, 8).map((x) => h`<div class="it ${x.status}"><div><b>${x.category || x.kind}</b><div class="mu">${fdate(x.entry_date)}${x.description ? " \xB7 " + x.description : ""}${x.status === "voided" ? " \xB7 VOIDED" : ""}</div></div><b>${kes(x.amount)}</b></div>`)}</div>` : empty("No finance transactions yet.")}</div>` : ""}
-  <div class="card"><h2>Attendance summary</h2>${lastMt ? h`<p class="mu">Latest meeting: ${fdate(lastMt.meeting_date)}</p><div class="grid" style="margin:0"><div class="kpi"><small>Present</small><b>${ac.filter((a) => a.status === "present").length}</b></div><div class="kpi"><small>Absent</small><b>${ac.filter((a) => a.status === "absent").length}</b></div><div class="kpi"><small>Late</small><b>${ac.filter((a) => a.status === "late").length}</b></div><div class="kpi"><small>Excused</small><b>${ac.filter((a) => a.status === "excused").length}</b></div></div>` : empty("No attendance records yet.")}</div>`;
+  <div class="card"><h2>Attendance summary</h2>${lastMt ? h`<p class="mu">Latest meeting: ${fdate(lastMt.meeting_date)}</p><div class="grid" style="margin:0"><div class="kpi"><small>Present</small><b>${ac.filter((a) => a.status === "present").length}</b></div><div class="kpi"><small>Absent</small><b>${ac.filter((a) => a.status === "absent").length}</b></div><div class="kpi"><small>Late</small><b>${ac.filter((a) => a.status === "late").length}</b></div><div class="kpi"><small>Excused</small><b>${ac.filter((a) => a.status === "excused").length}</b></div></div>` : empty("No attendance records yet.")}
+    ${att.some((x) => x.r.label !== "Not enough records") ? h`<p style="margin-top:12px"><b>Attendance ratings:</b> ${badge(att.filter((x) => x.r.label === "Good").length + " Good", "ok")} ${badge(att.filter((x) => x.r.label === "Fair").length + " Fair", "warn")} ${badge(poorAtt.length + " Poor", "bad")}</p>${poorAtt.length ? h`<p class="mu">Poor attendance: ${poorAtt.map((x) => x.m.name + " (" + x.r.note + ")").join("; ")}</p>` : ""}` : ""}</div>`;
 }
-var routes = {
+var routes2 = {
   home: { title: "Home", need: "member", view: memberHome },
   dash: { title: "Dashboard", sub: "Group overview", need: "staff", view: staffHome }
 };
@@ -649,60 +724,6 @@ __export(reports_exports, {
 });
 init_utils();
 init_state();
-
-// ../../mnt/user-data/outputs/real-brothers/js/attendance.js
-var attendance_exports = {};
-__export(attendance_exports, {
-  attStats: () => attStats,
-  routes: () => routes2
-});
-init_utils();
-init_state();
-var STATUS = [["present", "Present"], ["absent", "Absent"], ["late", "Late"], ["excused", "Excused"]];
-changes.mdate = (el) => {
-  state.f.mdate = el.value;
-  hooks.route();
-};
-forms["att-save"] = async (d, form) => {
-  const entries = [...form.querySelectorAll("select[data-mid]")].map((s) => ({ member_id: +s.dataset.mid, status: s.value }));
-  const n = await rpc("record_attendance", { p_date: d.date, p_entries: entries, p_notes: d.notes || null });
-  toast(`Attendance saved for ${n} members.`);
-  await hooks.refresh();
-};
-actions["att-all"] = (el) => {
-  document.querySelectorAll("select[data-mid]").forEach((s) => s.value = el.dataset.v);
-};
-function attStats(mid) {
-  const c = core(), rows = c.att.filter((a) => a.member_id === mid).map((a) => ({ a, mt: c.meetingById[a.meeting_id] })).filter((x) => x.mt && inPeriod(x.mt.meeting_date));
-  const n = (s) => rows.filter((x) => x.a.status === s).length, total = rows.length;
-  return { rows, total, present: n("present"), absent: n("absent"), late: n("late"), excused: n("excused"), rate: total ? pct(n("present") + n("late"), total) : 0 };
-}
-async function record() {
-  const c = core(), date = state.f.mdate || today(), active = c.members.filter((m) => m.status === "active");
-  const mt = c.meetings.find((x) => x.meeting_date === date), cur = {};
-  if (mt) c.att.filter((a) => a.meeting_id === mt.id).forEach((a) => cur[a.member_id] = a.status);
-  const stats = active.map((m) => ({ m, s: attStats(m.id) }));
-  return h`<div class="card"><h2>Record a meeting</h2><form data-form="att-save"><div class="row"><label>Meeting date<input type="date" name="date" value="${date}" data-chg="mdate" required></label><label>Notes (optional)<input name="notes" value="${mt && mt.notes && !/Migrated/.test(mt.notes) ? mt.notes : ""}"></label></div>
-    ${mt ? h`<p class="mu">A record already exists for this date. Saving updates it.</p>` : ""}
-    <div class="row" style="margin:10px 0">${STATUS.map((s) => h`<button type="button" class="btn sm ghost" data-act="att-all" data-v="${s[0]}">All ${s[1].toLowerCase()}</button>`)}</div>
-    <div class="tw"><table><tbody>${active.map((m) => h`<tr><td class="t">${m.name}</td><td><select data-mid="${m.id}" aria-label="Status for ${m.name}">${STATUS.map((s) => h`<option value="${s[0]}" ${(cur[m.id] || "present") === s[0] ? "selected" : ""}>${s[1]}</option>`)}</select></td></tr>`)}</tbody></table></div>
-    <div class="sticky-act"><button class="btn" type="submit">Save attendance</button></div></form>
-    <p class="mu">Absent adds KES ${c.T.ABSENT} and late adds KES ${c.T.LATE} to what the member owes for that month. Excused adds nothing.</p></div>
-  ${filterBar()}<div class="card"><h2>Attendance summary</h2><div class="tw"><table><thead><tr><th>Member</th><th>Meetings</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th><th>Attendance</th></tr></thead><tbody>${stats.map(({ m, s }) => h`<tr><td>${m.name}</td><td>${s.total}</td><td>${s.present}</td><td>${s.absent}</td><td>${s.late}</td><td>${s.excused}</td><td>${s.total ? s.rate + "%" : "-"}</td></tr>`)}</tbody></table></div></div>`;
-}
-async function mine() {
-  const m = me();
-  if (!m) return h`<div class="card">${empty("No member record is linked to this login.")}</div>`;
-  const s = attStats(m.id);
-  return h`${filterBar()}<div class="grid"><div class="kpi"><small>Meetings</small><b>${s.total}</b></div><div class="kpi green"><small>Present</small><b>${s.present}</b></div><div class="kpi red"><small>Absent</small><b>${s.absent}</b></div><div class="kpi"><small>Late</small><b>${s.late}</b></div><div class="kpi gold"><small>Attendance</small><b>${s.total ? s.rate + "%" : "-"}</b></div></div>
-  <div class="card"><h2>My meetings</h2>${s.rows.length ? h`<div class="tw"><table><tbody>${s.rows.sort((a, b) => a.mt.meeting_date < b.mt.meeting_date ? 1 : -1).map((x) => h`<tr><td class="t">${fdate(x.mt.meeting_date)}</td><td class="t">${badge(STATUS.find((t) => t[0] === x.a.status)[1], x.a.status === "present" ? "ok" : x.a.status === "absent" ? "bad" : "warn")}</td></tr>`)}</tbody></table></div>` : empty("No attendance records yet.")}</div>`;
-}
-var routes2 = {
-  att: { title: "Attendance", sub: "Record who attended", need: "secretary", view: record },
-  myatt: { title: "My Attendance", need: "member", view: mine }
-};
-
-// ../../mnt/user-data/outputs/real-brothers/js/reports.js
 function statementData(m) {
   const c = core(), s = summarise(m), sp = s.sp, pr = periodRows(m);
   const pays = c.payments.filter((p) => p.member_id === m.id && p.status === "posted").sort((a, b) => a.paid_on < b.paid_on ? -1 : 1);
@@ -809,9 +830,9 @@ async function build(tab) {
     }), money: [1, 2, 3, 4, 5], total: true };
   }
   if (tab === "savings") return { t: "Savings report", cols: ["Member", "Savings in period", "Savings to date"], rows: c.members.map((m) => [m.name, by(m.id, "savings"), sum(c.posted.filter((p) => p.member_id === m.id && p.kind === "savings"), (p) => p.amount)]), money: [1, 2], total: true };
-  if (tab === "attendance") return { t: "Attendance report", cols: ["Member", "Meetings", "Present", "Absent", "Late", "Excused", "Attendance %"], rows: act.map((m) => {
-    const s = attStats(m.id);
-    return [m.name, s.total, s.present, s.absent, s.late, s.excused, s.total ? s.rate + "%" : "-"];
+  if (tab === "attendance") return { t: "Attendance report", cols: ["Member", "Meetings", "Present", "Absent", "Late", "Excused", "Attendance %", "Rating"], rows: act.map((m) => {
+    const s = attStats(m.id), r = attRating(s);
+    return [m.name, s.total, s.present, s.absent, s.late, s.excused, s.total ? s.rate + "%" : "-", r.label];
   }), money: [] };
   if (tab === "penalties") return { t: "Penalty report", cols: ["Member", "Fines assessed (attendance and meetings)", "Added by treasurer", "Penalty payments recorded"], rows: act.map((m) => {
     const sp = savingsPosition(m);
@@ -881,10 +902,12 @@ actions["member-add"] = async (el) => {
 };
 actions["member-edit"] = async (el) => {
   const m = core().members.find((x) => x.id === +el.dataset.id);
-  const o = await ask({ title: "Edit member", fields: memberFields(m, false), ok: "Save changes" });
+  const o = await ask({ title: "Edit member", message: m.email ? `Login email is ${m.email}. If you change it, the old login stops working for this record and the member signs in with the new email.` : "This member has no login email yet.", fields: memberFields(m, true), ok: "Save changes" });
   if (!o) return;
   await busy(el, async () => {
-    await q(sb.from("members").update(toRow(o)).eq("id", m.id));
+    const { email, ...rest } = o, ne = nz(email);
+    if (ne && ne.toLowerCase() !== (m.email || "").toLowerCase()) await rpc("admin_change_member_email", { p_member: m.id, p_email: ne, p_reason: "Changed in member details" });
+    await q(sb.from("members").update(toRow(rest)).eq("id", m.id));
     await done("Member updated.");
   });
 };
@@ -971,7 +994,7 @@ async function list() {
   const pass = (r) => ({ active: r.m.status === "active", former: r.m.status === "left", benefited: r.m.benefited, outstanding: r.m.status === "active" && r.owing > 0, paid: r.status === "Complete" && r.m.status === "active", risk: r.status === "At Risk" && r.m.status === "active", all: true })[f];
   const rows = sums.filter(pass).filter((r) => !s || [r.m.name, r.m.email, r.m.id_number, r.m.phone].some((x) => (x || "").toLowerCase().includes(s)));
   return h`<div class="fbar"><input id="msearch" data-inp="search" placeholder="Search name, email, ID or phone" value="${state.f.q}"><select data-chg="mstatus">${FILTERS.map((x) => h`<option value="${x[0]}" ${x[0] === f ? "selected" : ""}>${x[1]}</option>`)}</select><button class="btn" data-act="member-add">${icon("plus")} Add member</button></div>
-  <div class="card"><div class="tw">${rows.length ? h`<table><thead><tr><th>Member</th><th class="t">Account no</th><th class="t">Status</th><th>Dowry this year</th><th>Owing</th></tr></thead><tbody>${rows.map((r) => h`<tr><td><a href="#/member/${r.m.id}"><b>${r.m.name}</b></a>${r.m.benefited ? h` ${badge("Benefited", "gold")}` : ""}${r.m.email ? "" : h` <span class="mu">(no email)</span>`}</td><td class="t">${r.m.id_number || "-"}</td><td class="t">${r.m.status === "left" ? badge("Former", "") : badge(r.status, statusKind(r.status))}</td><td>${kes(r.yearPaid)} / ${kes(r.yearTarget)}</td><td class="${r.owing > 0 ? "bad" : ""}">${kes(r.owing)}</td></tr>`)}</tbody></table>` : empty("No members match.", "Try another filter or search.")}</div></div>`;
+  <div class="card"><div class="tw">${rows.length ? h`<table><thead><tr><th>Member</th><th class="t">Account no</th><th class="t">Status</th><th>Dowry this year</th><th>Owing</th><th></th></tr></thead><tbody>${rows.map((r) => h`<tr><td><a href="#/member/${r.m.id}"><b>${r.m.name}</b></a>${r.m.benefited ? h` ${badge("Benefited", "gold")}` : ""}<div class="mu">${r.m.email || "no login email"}</div></td><td class="t">${r.m.id_number || "-"}</td><td class="t">${r.m.status === "left" ? badge("Former", "") : badge(r.status, statusKind(r.status))}</td><td>${kes(r.yearPaid)} / ${kes(r.yearTarget)}</td><td class="${r.owing > 0 ? "bad" : ""}">${kes(r.owing)}</td><td><button class="btn sm ghost" data-act="member-email" data-id="${r.m.id}">Change email</button></td></tr>`)}</tbody></table>` : empty("No members match.", "Try another filter or search.")}</div></div>`;
 }
 changes.search = (el) => {
   state.f.q = el.value;
@@ -1392,7 +1415,7 @@ forms["set-officers"] = async (d, form) => {
   await done2("Officers saved.");
 };
 forms["set-config"] = async (d) => {
-  const rows = [{ key: "monthly_savings", value: +d.monthly_savings }, { key: "monthly_dowry", value: +d.monthly_dowry }, { key: "payout_amount", value: +d.payout_amount }, { key: "savings_start", value: d.savings_start }, { key: "group_email", value: d.group_email }];
+  const rows = [{ key: "monthly_savings", value: +d.monthly_savings }, { key: "monthly_dowry", value: +d.monthly_dowry }, { key: "payout_amount", value: +d.payout_amount }, { key: "savings_start", value: d.savings_start }, { key: "group_email", value: d.group_email }, { key: "att_good", value: +d.att_good }, { key: "att_fair", value: +d.att_fair }];
   await q(sb.from("settings").upsert(rows));
   await done2("Settings saved.");
 };
@@ -1440,7 +1463,8 @@ async function view2() {
   const log = audit.filter((a) => (at === "all" || a.table_name === at) && (!aq || [a.actor, a.actor_email, a.action, a.reason].some((x) => (x || "").toLowerCase().includes(aq)))).slice(0, 100);
   return h`<div class="card"><h2>Officers</h2><form data-form="set-officers"><div class="row">${off.map((o) => h`<label>${o.position}<input data-pos="${o.position}" data-sort="${o.sort}" value="${o.holder || ""}" placeholder="Vacant"></label>`)}</div><p><button class="btn" type="submit">Save officers</button></p></form></div>
   <div class="card"><h2>Contributions</h2><form data-form="set-config"><div class="row"><label>Monthly savings (KES)<input type="number" name="monthly_savings" value="${S.monthly_savings}" min="0"></label><label>Monthly dowry (KES)<input type="number" name="monthly_dowry" value="${S.monthly_dowry}" min="0"></label><label>Standard dowry payout (KES)<input type="number" name="payout_amount" value="${S.payout_amount}" min="0"></label></div>
-    <div class="row"><label>Monthly dues counted from (YYYY-MM)<input name="savings_start" value="${S.savings_start}" pattern="\\d{4}-\\d{2}" required></label><label>Group email<input type="email" name="group_email" value="${S.group_email || ""}"></label></div><p><button class="btn" type="submit">Save settings</button></p></form></div>
+    <div class="row"><label>Monthly dues counted from (YYYY-MM)<input name="savings_start" value="${S.savings_start}" pattern="\\d{4}-\\d{2}" required></label><label>Group email<input type="email" name="group_email" value="${S.group_email || ""}"></label></div>
+    <div class="row"><label>Good attendance from (%)<input type="number" name="att_good" value="${S.att_good}" min="1" max="100"></label><label>Fair attendance from (%)<input type="number" name="att_fair" value="${S.att_fair}" min="1" max="100"></label></div><p><button class="btn" type="submit">Save settings</button></p></form></div>
   <div class="card"><h2>Penalty amounts</h2><form data-form="set-penalties"><div class="row">${c.ptypes.map((t) => h`<label>${t.name}<input type="number" data-pt="${t.id}" value="${t.amount}" min="0"></label>`)}</div><p><button class="btn" type="submit">Save penalty amounts</button></p></form></div>
   <div class="card"><h2>Dowry periods</h2><div class="tw"><table><thead><tr><th>Period</th><th>Starts</th><th>Due</th><th>Target</th></tr></thead><tbody>${c.periods.map((p) => h`<tr><td>Wave ${p.wave} ${p.year}</td><td>${fdate(p.start_date)}</td><td>${fdate(p.due_date)}</td><td>${kes(p.target)}</td></tr>`)}</tbody></table></div><p><button class="btn ghost" data-act="set-year">Add next year</button></p></div>
   <div class="card"><h2>Roles</h2><p class="mu">Administrator: everything. Treasurer: payments and finance. Secretary: attendance and messages. The person must create an account first.</p>
