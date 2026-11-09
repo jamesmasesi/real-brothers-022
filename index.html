@@ -6,11 +6,29 @@
 <meta name="theme-color" content="#0d4a2f">
 <title>Real Brothers 022</title>
 <link rel="stylesheet" href="app.css">
-<!-- Supabase client, pinned to an exact version -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><div id="boot" style="font:16px/1.5 system-ui,sans-serif;padding:24px;max-width:520px;margin:12vh auto;text-align:center;color:#0d4a2f"><b style="letter-spacing:2px">REAL BROTHERS 022</b><p>Loading...</p></div></div>
+<noscript><p style="font:16px system-ui;padding:24px;text-align:center">Please turn on JavaScript in your browser to use Real Brothers 022.</p></noscript>
+<!-- Old browsers that cannot run modern JavaScript -->
+<script nomodule>document.getElementById("boot").innerHTML='<b>Your browser is too old for this app.</b><p>Please update Chrome or Safari, or open the site in another browser.</p>';</script>
+<!-- If the app cannot start, say why instead of leaving a white page -->
+<script>
+(function () {
+  function show(msg) {
+    var el = document.getElementById("boot"); if (!el) return;   // the app has started: nothing to do
+    el.innerHTML = '<b>The app could not start.</b><p id="bootmsg"></p><p><button onclick="location.reload()" style="padding:10px 18px;border:0;border-radius:10px;background:#1a6b47;color:#fff;font:inherit">Try again</button></p>';
+    document.getElementById("bootmsg").textContent = msg;
+  }
+  window.addEventListener("error", function (e) {
+    var t = e.target;
+    if (t && (t.tagName === "SCRIPT" || t.tagName === "LINK")) show("A file could not be loaded: " + (t.src || t.href) + ". It may be missing from the website, or blocked by your network.");
+    else if (e.message) show("Error: " + e.message);
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) { show("Error: " + ((e.reason && e.reason.message) || e.reason)); });
+  setTimeout(function () { show("It is taking too long. Check your internet connection, or try another browser."); }, 12000);
+})();
+</script>
 <div id="toasts" aria-live="polite"></div>
 <dialog id="dlg"></dialog>
 <script type="module" src="app.js"></script>
